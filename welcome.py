@@ -313,7 +313,7 @@ async def setup_ticket(
                 close_category=close_category,
                 lock_channel=lock_channel
             )
-            await view_logic.create_ticket(inter, button)
+            await view_logic.create_ticket(inter)
 
     view = CustomTicketPanelView()
     await panel_room.send(embed=embed, view=view)
