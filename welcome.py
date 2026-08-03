@@ -33,7 +33,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 GUILD_ID = 1532326696714240062
 
 ping_channel_id = None
-welcome_channel_id = None  # متغير لتخزين روم الترحيب
+# تم تثبيت روم الترحيب تلقائياً على الرابط الذي أرسلته
+welcome_channel_id = 1532952608363516025
 
 @bot.event
 async def on_ready():
@@ -60,30 +61,38 @@ async def auto_ping_task():
             except Exception as e:
                 print(f"خطأ في إرسال الـ Ping: {e}")
 
-# ==================== نظام الترحيب بالاعضاء الجدد ====================
+# ==================== نظام الترحيب الثابت والمطابق تماماً ====================
 @bot.event
 async def on_member_join(member: discord.Member):
     global welcome_channel_id
     if welcome_channel_id:
         channel = bot.get_channel(welcome_channel_id)
         if channel:
+            description_text = (
+                f"> أهلاً بك في سيرفر **ONIX COMMUNITY**\n"
+                f"> أنرت السيرفر يا {member.mention}\n\n"
+                f"> ترتيبك بين الأعضاء: **{member.guild.member_count}**\n\n"
+                f"> يرجى قراءة القوانين والالتزام بها:\n"
+                f"> <#132456789012345678> **· 🟪 「 القوانين 」**\n\n"
+                f"> تابع آخر أخبار السيرفر:\n"
+                f"> <#132456789012345678> **· 📢 「 اخبار 」**\n\n"
+                f"> لا تفوتك آخر الهدايا والقيم:\n"
+                f"> <#132456789012345678> **· 🎁 「 الهدايا 」**"
+            )
+
             embed = discord.Embed(
-                title="✨ 𝚆𝙴𝙻𝙲𝙾𝙼𝙴 𝚃𝙾 𝙾𝙽𝙸𝚇 ✨",
-                description=f"> أهلاً بك يا {member.mention} في سيرفرنا!\n> نتمنى لك قضاء وقت ممتع معنا 🤍\n> أنت العضو رقم **{member.guild.member_count}**",
+                description=description_text,
                 color=discord.Color.from_rgb(15, 15, 15)
             )
-            if member.guild.icon:
-                embed.set_thumbnail(url=member.display_avatar.url)
-                embed.set_footer(text=f"Server: {member.guild.name}", icon_url=member.guild.icon.url)
-            else:
-                embed.set_thumbnail(url=member.display_avatar.url)
+            
+            embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe")
+            embed.set_footer(text="✨ ONIX COMMUNITY ✨\nWelcome to our family")
                 
             try:
                 await channel.send(content=f"welcome {member.mention}", embed=embed)
             except Exception as e:
-                print(f"خطأ في إرسال رسالة الترحيب: {e}")
+                print(f"خطأ في إرسال الترحيب: {e}")
 
-# أمر لتحديد روم الترحيب عبر السلاش
 @bot.tree.command(name="set-welcome", description="تحديد روم الترحيب بالأعضاء الجدد")
 @app_commands.describe(channel="اختر الروم المخصص للترحيب")
 async def set_welcome(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -269,7 +278,6 @@ class MultiTicketPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(TicketSelectDropdown(options_data))
 
-# 1. أمر بانل التذاكر المتعدد المتقدم
 @bot.tree.command(name="ticket-setup", description="إنشاء بانل تكتات متطور يحتوي على خيارات متعددة")
 @app_commands.describe(
     panel_description="وصف البانل العام داخل الإيمبد",
@@ -356,7 +364,6 @@ async def ticket_setup(
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✨ تم نشر بانل التكتات المتعدد بنجاح!", ephemeral=True)
 
-# 2. أمر بانل مستقل (Panel) يطلب وصف البانل، اسم الزر، ووصف ما بداخل الزر
 @bot.tree.command(name="panel", description="إنشاء بانل تذاكر مستقل مع تخصيص وصف الزر واسمه")
 @app_commands.describe(
     panel_description="وصف البانل الرئيسي داخل الإيمبد",
@@ -386,7 +393,6 @@ async def panel(
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✨ تم إنشاء بانل الزر المستقل بنجاح!", ephemeral=True)
 
-# ==================== نظام القيف أوي (Giveaway) ====================
 class GiveawayView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -434,7 +440,6 @@ async def giveaway(interaction: discord.Interaction, prize: str, duration_minute
     except Exception as e:
         print(f"خطأ في انهاء القيف أوي: {e}")
 
-# ==================== أمر البينج ====================
 @bot.tree.command(name="set-ping", description="تحديد الروم الذي سيتم إرسال رسالة Ping تلقائية إليه كل 5 دقائق")
 @app_commands.describe(channel="اختر الروم لإرسال البينج إليه")
 async def set_ping(interaction: discord.Interaction, channel: discord.TextChannel):
