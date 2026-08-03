@@ -1,3 +1,5 @@
+from flask import Flask
+from threading import Thread
 import os
 import discord
 from discord.ext import commands
@@ -6,6 +8,23 @@ import asyncio
 import random
 import re
 
+# --- سيرفر Flask الوهمي لبقاء البوت شغال 24/7 على Render ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+keep_alive()
+
+# --- إعدادات البوت والـ Intents ---
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
@@ -30,6 +49,7 @@ async def on_ready():
     except Exception as e:
         print(f"خطأ في مزامنة الأوامر: {e}")
 
+# --- نظام الترحيب ---
 @bot.event
 async def on_member_join(member):
     if member.guild.id != GUILD_ID:
@@ -65,7 +85,7 @@ async def on_member_join(member):
 
         await channel.send(content=text_content, embed=embed)
 
-# دوال وKlasses القيف أواي
+# --- نظام القيف أواي (Giveaway) ---
 def parse_duration(duration_str: str) -> int:
     duration_str = duration_str.lower().strip()
     match = re.match(r"^(\d+)\s*([smhd]?)$", duration_str)
@@ -143,11 +163,7 @@ async def giveaway_slash(interaction: discord.Interaction, prize: str, duration:
     if view.participants:
         winner_id = random.choice(list(view.participants))
         winner = interaction.guild.get_member(winner_id)
-
-        if winner:
-            winner_text = winner.mention
-        else:
-            winner_text = f"<@{winner_id}>"
+        winner_text = winner.mention if winner else f"<@{winner_id}>"
 
         result_embed = discord.Embed(
             title="GIVEAWAY ENDED",
@@ -165,7 +181,7 @@ async def giveaway_slash(interaction: discord.Interaction, prize: str, duration:
     else:
         await channel.send(f"❌ انتهى القيف أواي لـ **{prize}**، للأسف لم يشارك أي أحد في السحب!")
 
-# --- نظام الـ Panel داخل إيمبد فخم ---
+# --- نظام الـ Panel العادي ---
 class CustomPanelView(discord.ui.View):
     def __init__(self, response_text: str):
         super().__init__(timeout=None)
@@ -197,45 +213,8 @@ async def panel_slash(interaction: discord.Interaction, description: str, button
 
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ تم إنشاء البانل بنجاح داخل الإيمبد!", ephemeral=True)
-import os
-import discord
-from discord.ext import commands
-from discord import app_commands
 
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-# الأيديات القديمة الخاصة بك (ترحيب وغيرها...)
-WELCOME_CHANNEL_ID = 1532952608363516025
-RULES_CHANNEL_ID = 153295154619372554
-NEWS_CHANNEL_ID = 1532952352250925056
-GIVEAWAY_CHANNEL_ID = 1532946535363510292
-GUILD_ID = 1532326696714240062
-
-@bot.event
-async def on_ready():
-    print(f"ONIX BOT بنجاح {bot.user.name}")
-    try:
-        guild = discord.Object(id=GUILD_ID)
-        bot.tree.copy_global_to(guild=guild)
-        await bot.tree.sync(guild=guild)
-        print("تم مزامنة أوامر السلاش بنجاح")
-    except Exception as e:
-        print(f"خطأ في مزامنة الأوامر {e}")
-
-@bot.event
-async def on_member_join(member):
-    # كود الترحيب القديم الخاص بك...
-    pass
-
-
-# ==========================================
-# ⬇️ ضع كود التكتات الكامل هنا في الأسفل ⬇️
-# ==========================================
-
+# --- نظام التكتات المتكامل (Tickets) ---
 class TicketCloseView(discord.ui.View):
     def __init__(self, admin_role_id: int):
         super().__init__(timeout=None)
@@ -326,7 +305,7 @@ async def setup_ticket(
         else:
             embed.set_thumbnail(url=panel_image_emoji)
 
-    class CustomPanelView(discord.ui.View):
+    class CustomTicketPanelView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=None)
             
@@ -343,10 +322,8 @@ async def setup_ticket(
             )
             await view_logic.create_ticket(inter, btn)
 
-    await panel_room.send(embed=embed, view=CustomPanelView())
+    await panel_room.send(embed=embed, view=CustomTicketPanelView())
     await interaction.response.send_message("تم إنشاء بانل التكتات بنجاح!", ephemeral=True)
 
-# سطر التشغيل الأساسي يبقى في النهاية كما هو:
-
+# --- تشغيل البوت النهائي ---
 bot.run(os.getenv("DISCORD_TOKEN"))
-
