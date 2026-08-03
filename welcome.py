@@ -1,12 +1,11 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 from flask import Flask
 from threading import Thread
 import os
 import random
 import asyncio
-import re
 
 app = Flask('')
 
@@ -30,11 +29,10 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-WELCOME_CHANNEL_ID = 1532952608363516025
-RULES_CHANNEL_ID = 1532951546193772554
-NEWS_CHANNEL_ID = 1532952352250925056
-GIVEAWAY_CHANNEL_ID = 1532946535363510292
 GUILD_ID = 1532326696714240062
+
+# متغير لتخزين روم البينج
+ping_channel_id = None
 
 @bot.event
 async def on_ready():
@@ -46,6 +44,21 @@ async def on_ready():
         print("تم مزامنة أوامر السلاش بنجاح!")
     except Exception as e:
         print(f"خطأ في مزامنة الأوامر: {e}")
+    
+    if not auto_ping_task.is_running():
+        auto_ping_task.start()
+
+# مهمة الـ Ping التلقائية كل 5 دقائق
+@tasks.loop(minutes=5)
+async def auto_ping_task():
+    global ping_channel_id
+    if ping_channel_id:
+        channel = bot.get_channel(ping_channel_id)
+        if channel:
+            try:
+                await channel.send("🏓 **ONIX BOT Ping Check:** البوت يعمل بكفاءة عالية ومتصل بنجاح! ✨")
+            except Exception as e:
+                print(f"خطأ في إرسال الـ Ping: {e}")
 
 class TicketCloseView(discord.ui.View):
     def __init__(self, admin_role_id: int, ticket_logs_channel: discord.TextChannel = None, tqeem_room: discord.TextChannel = None):
@@ -133,7 +146,6 @@ class TicketCoreHandler:
         if mention_target:
             mentions_text += f" {mention_target}"
 
-        # تنسيق إيمبد التذكرة بشكل فخم ونظيف بدون أي روابط نصية ظاهرة
         embed = discord.Embed(
             title="❖ 𝙾𝙽𝙸𝚇 🭠 𝓣𝓲𝓬𝓴𝓮𝓽",
             description=f"> {welcome_message}",
@@ -146,7 +158,6 @@ class TicketCoreHandler:
         if ownership and "تفعيل" in ownership.lower():
             embed.add_field(name="🛡️ تنبيه الإدارة", value=f"> تم استدعاء المسؤولين بواسطة {user.mention}", inline=False)
 
-        # جعل الصورة تظهر بشكل احترافي داخل الإيمبد بدون رابط نصي مزعج
         if welcome_image:
             embed.set_image(url=welcome_image)
             
@@ -178,12 +189,12 @@ class TicketSelectDropdown(discord.ui.Select):
             discord_options.append(
                 discord.SelectOption(
                     label=item["label"],
-                    description="اضغط هنا لفتح هذا القسم المخصص",
-                    emoji="🎫"
+                    description=item["description"],
+                    emoji=item["emoji"]
                 )
             )
             
-        super().__init__(placeholder=" اضغط هنا لاختيار نوع التذكرة...", min_values=1, max_values=1, options=discord_options, custom_id="custom_ticket_dropdown")
+        super().__init__(placeholder="اضغط هنا لاختيار قسم التذكرة المناسب...", min_values=1, max_values=1, options=discord_options, custom_id="multi_ticket_dropdown_system")
 
     async def callback(self, interaction: discord.Interaction):
         selected_label = self.values[0]
@@ -216,32 +227,48 @@ class MultiTicketPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(TicketSelectDropdown(options_data))
 
-@bot.tree.command(name="ticket-setup", description="إنشاء بانل التكتات الأنيق مع تحديد الخيارات")
+@bot.tree.command(name="ticket-setup", description="إنشاء بانل تكتات متطور يحتوي على خيارات متعددة")
 @app_commands.describe(
-    panel_description="وصف البانل داخل الإيمبد الرئيسي",
-    ticket_label="اسم الخيار بالقائمة (مثال: الدعم الفني / إبلاغ عن مشكلة)",
-    ticket="اسم التذكرة (مثال: support-{user})",
-    category="كاتجوري التذاكر الجديدة",
-    role="الرول الخاصة بادارة التذكرة",
-    ticket_logs="روم ارسال التذاكر المغلقة (Logs)",
+    panel_description="وصف البانل العام داخل الإيمبد",
+    welcome_image="رابط صورة البانل الرئيسية (تظهر بداخل الإيمبد بشكل أنيق)",
+    
+    # خيار التذكرة الأول
+    label_1="اسم الخيار الأول بالقائمة (مثال: الدعم الفني)",
+    desc_1="وصف الخيار الأول",
+    emoji_1="إيموجي الخيار الأول (مثال: 🎫)",
+    ticket_1="اسم تذكرة الخيار الأول (مثال: support-{user})",
+    category_1="كاتجوري الخيار الأول",
+    role_1="رول إدارة الخيار الأول",
+    
+    # خيار التذكرة الثاني (اختياري)
+    label_2="اسم الخيار الثاني (مثال: بلاغ أو شكوى)",
+    desc_2="وصف الخيار الثاني",
+    emoji_2="إيموجي الخيار الثاني (مثال: 🚨)",
+    ticket_2="اسم تذكرة الخيار الثاني (مثال: report-{user})",
+    category_2="كاتجوري الخيار الثاني",
+    role_2="رول إدارة الخيار الثاني",
+    
+    # الإعدادات العامة المشتركة
+    ticket_logs="روم السجلات (Logs)",
     close_catejory="كاتجوري التكتات المغلقة",
-    tqeem_room="روم ارسال تقييم مستلم التذكرة",
-    ownership="تفعيل أو إلغاء استدعاء الأونرشيب",
-    reason="تفعيل أو إلغاء سبب فتح التذكرة",
+    tqeem_room="روم التقييم",
+    ownership="تفعيل استدعاء الأونرشيب؟",
+    reason="تفعيل سبب فتح التذكرة؟",
     username_number="اسم التذكرة يوزر العضو أم رقم؟",
     admin="رتبة مسؤول الادمنية",
-    welcome_msg="الرسالة التي ترسل داخل التذكرة",
-    welcome_image="رابط الصورة داخل التذكرة (تظهر بداخل الإيمبد بشكل أنيق)",
-    mentions="تحديد منشن الرتب أو الأشخاص عند فتح التذكرة",
-    line="تعيين رابط صورة الخط (Line)"
+    welcome_msg="رسالة الترحيب داخل التذاكر",
+    mentions="منشنات إضافية عند الفتح",
+    line="رابط صورة الخط (Line)"
 )
 async def ticket_setup(
     interaction: discord.Interaction,
     panel_description: str,
-    ticket_label: str,
-    ticket: str,
-    category: discord.CategoryChannel,
-    role: discord.Role,
+    label_1: str,
+    desc_1: str,
+    emoji_1: str,
+    ticket_1: str,
+    category_1: discord.CategoryChannel,
+    role_1: discord.Role,
     ticket_logs: discord.TextChannel,
     close_catejory: discord.CategoryChannel,
     tqeem_room: discord.TextChannel,
@@ -250,16 +277,24 @@ async def ticket_setup(
     username_number: str,
     admin: discord.Role,
     welcome_msg: str,
+    label_2: str = None,
+    desc_2: str = None,
+    emoji_2: str = None,
+    ticket_2: str = None,
+    category_2: discord.CategoryChannel = None,
+    role_2: discord.Role = None,
     welcome_image: str = None,
     mentions: str = None,
     line: str = None
 ):
     options_data = [
         {
-            "label": ticket_label,
-            "ticket": ticket,
-            "category": category,
-            "role": role,
+            "label": label_1,
+            "description": desc_1,
+            "emoji": emoji_1,
+            "ticket": ticket_1,
+            "category": category_1,
+            "role": role_1,
             "ticket_logs": ticket_logs,
             "close_category": close_catejory,
             "tqeem_room": tqeem_room,
@@ -274,6 +309,28 @@ async def ticket_setup(
         }
     ]
 
+    # إضافة الخيار الثاني إذا قام المستخدم بتعبئته
+    if label_2 and ticket_2 and category_2 and role_2:
+        options_data.append({
+            "label": label_2,
+            "description": desc_2 or "قسم مخصص إضافي",
+            "emoji": emoji_2 or "📌",
+            "ticket": ticket_2,
+            "category": category_2,
+            "role": role_2,
+            "ticket_logs": ticket_logs,
+            "close_category": close_catejory,
+            "tqeem_room": tqeem_room,
+            "ownership": ownership,
+            "reason": reason,
+            "username_number": username_number,
+            "admin": admin,
+            "welcome_msg": welcome_msg,
+            "welcome_image": welcome_image,
+            "mentions": mentions,
+            "line": line
+        })
+
     embed = discord.Embed(
         title="✨ 𝙾𝙽𝙸𝚇 𝙲𝙾𝙼𝙼𝚄𝙽𝙸𝚃𝚈 • 🎫 𝓣𝓲𝓬𝓴𝓮𝓽𝓼 ✨",
         description=f"> {panel_description}",
@@ -281,11 +338,19 @@ async def ticket_setup(
     )
     if welcome_image:
         embed.set_image(url=welcome_image)
-    embed.set_footer(text="اختر من القائمة أدناه ما يناسب طلبك وسيقوم النظام بخدمتك.")
+    embed.set_footer(text="اختر القسم المناسب من القائمة أدناه لفتح تذكرتك.")
 
     view = MultiTicketPanelView(options_data)
 
     await interaction.channel.send(embed=embed, view=view)
-    await interaction.response.send_message("✨ تم نشر بانل التكتات الأنيق بنجاح!", ephemeral=True)
+    await interaction.response.send_message("✨ تم نشر بانل التكتات المتعدد بنجاح!", ephemeral=True)
+
+# أمر سلاش لتحديد روم البينج التلقائي كل 5 دقائق
+@bot.tree.command(name="set-ping", description="تحديد الروم الذي سيتم إرسال رسالة Ping تلقائية إليه كل 5 دقائق")
+@app_commands.describe(channel="اختر الروم لإرسال البينج إليه")
+async def set_ping(interaction: discord.Interaction, channel: discord.TextChannel):
+    global ping_channel_id
+    ping_channel_id = channel.id
+    await interaction.response.send_message(f"✅ تم تفعيل بنج البوت التلقائي بنجاح في الروم: {channel.mention} (كل 5 دقائق).", ephemeral=True)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
