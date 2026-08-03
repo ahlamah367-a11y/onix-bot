@@ -32,8 +32,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 GUILD_ID = 1532326696714240062
 
-# متغير لتخزين روم البينج
 ping_channel_id = None
+welcome_channel_id = None  # متغير لتخزين روم الترحيب
 
 @bot.event
 async def on_ready():
@@ -49,7 +49,6 @@ async def on_ready():
     if not auto_ping_task.is_running():
         auto_ping_task.start()
 
-# مهمة الـ Ping التلقائية كل 5 دقائق
 @tasks.loop(minutes=5)
 async def auto_ping_task():
     global ping_channel_id
@@ -61,7 +60,48 @@ async def auto_ping_task():
             except Exception as e:
                 print(f"خطأ في إرسال الـ Ping: {e}")
 
-# ==================== نظام التذاكر ====================
+# ==================== نظام الترحيب بالاعضاء الجدد ====================
+@bot.event
+async def on_member_join(member: discord.Member):
+    global welcome_channel_id
+    if welcome_channel_id:
+        channel = bot.get_channel(welcome_channel_id)
+        if channel:
+            embed = discord.Embed(
+                title="✨ 𝚆𝙴𝙻𝙲𝙾𝙼𝙴 𝚃𝙾 𝙾𝙽𝙸𝚇 ✨",
+                description=f"> أهلاً بك يا {member.mention} في سيرفرنا!\n> نتمنى لك قضاء وقت ممتع معنا 🤍\n> أنت العضو رقم **{member.guild.member_count}**",
+                color=discord.Color.from_rgb(15, 15, 15)
+            )
+            if member.guild.icon:
+                embed.set_thumbnail(url=member.display_avatar.url)
+                embed.set_footer(text=f"Server: {member.guild.name}", icon_url=member.guild.icon.url)
+            else:
+                embed.set_thumbnail(url=member.display_avatar.url)
+                
+            try:
+                await channel.send(content=f"welcome {member.mention}", embed=embed)
+            except Exception as e:
+                print(f"خطأ في إرسال رسالة الترحيب: {e}")
+
+# أمر لتحديد روم الترحيب عبر السلاش
+@bot.tree.command(name="set-welcome", description="تحديد روم الترحيب بالأعضاء الجدد")
+@app_commands.describe(channel="اختر الروم المخصص للترحيب")
+async def set_welcome(interaction: discord.Interaction, channel: discord.TextChannel):
+    global welcome_channel_id
+    welcome_channel_id = channel.id
+    await interaction.response.send_message(f"✅ تم تحديد روم الترحيب بنجاح: {channel.mention}", ephemeral=True)
+
+# ==================== نظام التذاكر والبانل المستقل ====================
+class SingleTicketButtonView(discord.ui.View):
+    def __init__(self, button_label: str, button_desc: str):
+        super().__init__(timeout=None)
+        self.button_label = button_label
+        self.button_desc = button_desc
+
+    @discord.ui.button(label="🎫 فتح تذكرة", style=discord.ButtonStyle.blurple, custom_id="single_panel_ticket_btn")
+    async def open_ticket_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(f"✅ تم استلام طلبك عبر زر: **{self.button_label}**\n> {self.button_desc}", ephemeral=True)
+
 class TicketCloseView(discord.ui.View):
     def __init__(self, admin_role_id: int, ticket_logs_channel: discord.TextChannel = None, tqeem_room: discord.TextChannel = None):
         super().__init__(timeout=None)
@@ -229,32 +269,33 @@ class MultiTicketPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(TicketSelectDropdown(options_data))
 
+# 1. أمر بانل التذاكر المتعدد المتقدم
 @bot.tree.command(name="ticket-setup", description="إنشاء بانل تكتات متطور يحتوي على خيارات متعددة")
 @app_commands.describe(
     panel_description="وصف البانل العام داخل الإيمبد",
-    welcome_image="رابط صورة البانل الرئيسية (تظهر بداخل الإيمبد بشكل أنيق)",
-    label_1="اسم الخيار الأول بالقائمة (مثال: الدعم الفني)",
+    welcome_image="رابط صورة البانل الرئيسية",
+    label_1="اسم الخيار الأول بالقائمة",
     desc_1="وصف الخيار الأول",
-    emoji_1="إيموجي الخيار الأول (مثال: 🎫)",
-    ticket_1="اسم تذكرة الخيار الأول (مثال: support-{user})",
+    emoji_1="إيموجي الخيار الأول",
+    ticket_1="اسم تذكرة الخيار الأول",
     category_1="كاتجوري الخيار الأول",
     role_1="رول إدارة الخيار الأول",
-    label_2="اسم الخيار الثاني (مثال: بلاغ أو شكوى)",
+    label_2="اسم الخيار الثاني (اختياري)",
     desc_2="وصف الخيار الثاني",
-    emoji_2="إيموجي الخيار الثاني (مثال: 🚨)",
-    ticket_2="اسم تذكرة الخيار الثاني (مثال: report-{user})",
+    emoji_2="إيموجي الخيار الثاني",
+    ticket_2="اسم تذكرة الخيار الثاني",
     category_2="كاتجوري الخيار الثاني",
     role_2="رول إدارة الخيار الثاني",
-    ticket_logs="روم السجلات (Logs)",
-    close_catejory="كاتجوري التكتات المغلقة",
+    ticket_logs="روم السجلات",
+    close_catejory="كاتجوري المغلقة",
     tqeem_room="روم التقييم",
-    ownership="تفعيل استدعاء الأونرشيب؟",
-    reason="تفعيل سبب فتح التذكرة؟",
-    username_number="اسم التذكرة يوزر العضو أم رقم؟",
+    ownership="استدعاء الأونرشيب؟",
+    reason="سبب فتح التذكرة؟",
+    username_number="يوزر العضو أم رقم؟",
     admin="رتبة مسؤول الادمنية",
-    welcome_msg="رسالة الترحيب داخل التذاكر",
-    mentions="منشنات إضافية عند الفتح",
-    line="رابط صورة الخط (Line)"
+    welcome_msg="رسالة الترحيب",
+    mentions="منشنات إضافية",
+    line="رابط الخط"
 )
 async def ticket_setup(
     interaction: discord.Interaction,
@@ -285,45 +326,21 @@ async def ticket_setup(
 ):
     options_data = [
         {
-            "label": label_1,
-            "description": desc_1,
-            "emoji": emoji_1,
-            "ticket": ticket_1,
-            "category": category_1,
-            "role": role_1,
-            "ticket_logs": ticket_logs,
-            "close_category": close_catejory,
-            "tqeem_room": tqeem_room,
-            "ownership": ownership,
-            "reason": reason,
-            "username_number": username_number,
-            "admin": admin,
-            "welcome_msg": welcome_msg,
-            "welcome_image": welcome_image,
-            "mentions": mentions,
-            "line": line
+            "label": label_1, "description": desc_1, "emoji": emoji_1, "ticket": ticket_1,
+            "category": category_1, "role": role_1, "ticket_logs": ticket_logs,
+            "close_category": close_catejory, "tqeem_room": tqeem_room, "ownership": ownership,
+            "reason": reason, "username_number": username_number, "admin": admin,
+            "welcome_msg": welcome_msg, "welcome_image": welcome_image, "mentions": mentions, "line": line
         }
     ]
 
     if label_2 and ticket_2 and category_2 and role_2:
         options_data.append({
-            "label": label_2,
-            "description": desc_2 or "قسم مخصص إضافي",
-            "emoji": emoji_2 or "📌",
-            "ticket": ticket_2,
-            "category": category_2,
-            "role": role_2,
-            "ticket_logs": ticket_logs,
-            "close_category": close_catejory,
-            "tqeem_room": tqeem_room,
-            "ownership": ownership,
-            "reason": reason,
-            "username_number": username_number,
-            "admin": admin,
-            "welcome_msg": welcome_msg,
-            "welcome_image": welcome_image,
-            "mentions": mentions,
-            "line": line
+            "label": label_2, "description": desc_2 or "قسم مخصص", "emoji": emoji_2 or "📌", "ticket": ticket_2,
+            "category": category_2, "role": role_2, "ticket_logs": ticket_logs,
+            "close_category": close_catejory, "tqeem_room": tqeem_room, "ownership": ownership,
+            "reason": reason, "username_number": username_number, "admin": admin,
+            "welcome_msg": welcome_msg, "welcome_image": welcome_image, "mentions": mentions, "line": line
         })
 
     embed = discord.Embed(
@@ -336,9 +353,38 @@ async def ticket_setup(
     embed.set_footer(text="اختر القسم المناسب من القائمة أدناه لفتح تذكرتك.")
 
     view = MultiTicketPanelView(options_data)
-
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✨ تم نشر بانل التكتات المتعدد بنجاح!", ephemeral=True)
+
+# 2. أمر بانل مستقل (Panel) يطلب وصف البانل، اسم الزر، ووصف ما بداخل الزر
+@bot.tree.command(name="panel", description="إنشاء بانل تذاكر مستقل مع تخصيص وصف الزر واسمه")
+@app_commands.describe(
+    panel_description="وصف البانل الرئيسي داخل الإيمبد",
+    button_label="اسم زر البانل (مثال: فتح تذكرة دعم)",
+    button_description="وصف ما بداخل الزر أو رسالة التأكيد",
+    panel_image="رابط صورة البانل (اختياري)"
+)
+async def panel(
+    interaction: discord.Interaction,
+    panel_description: str,
+    button_label: str,
+    button_description: str,
+    panel_image: str = None
+):
+    embed = discord.Embed(
+        title="❖ 𝙾𝙽𝙸𝚇 🭠 𝓣𝓲𝓬𝓴𝓮𝓽 𝓟𝓪𝓷𝓮𝓵",
+        description=f"> {panel_description}",
+        color=discord.Color.from_rgb(15, 15, 15)
+    )
+    if panel_image:
+        embed.set_image(url=panel_image)
+    embed.set_footer(text="ONIX Community • Click button below")
+
+    view = SingleTicketButtonView(button_label, button_description)
+    view.children[0].label = button_label
+
+    await interaction.channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✨ تم إنشاء بانل الزر المستقل بنجاح!", ephemeral=True)
 
 # ==================== نظام القيف أوي (Giveaway) ====================
 class GiveawayView(discord.ui.View):
@@ -347,8 +393,7 @@ class GiveawayView(discord.ui.View):
 
     @discord.ui.button(label="🎉 مشاركة", style=discord.ButtonStyle.success, custom_id="join_giveaway_btn")
     async def join_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # يمكنك هنا إضافة منطق حفظ المشاركين أو تركها كزر تفاعلي احترافي
-        await interaction.response.send_message("✅ تم تسجيل مشاركتك في القيف أوي بنجاح! بالتوفيق.", ephemeral=True)
+        await interaction.response.send_message("✅ تم تسجيل مشاركتك في المسابقة بنجاح!", ephemeral=True)
 
 @bot.tree.command(name="giveaway", description="إنشاء مسابقة قيف أوي جديدة بشكل فخم")
 @app_commands.describe(
@@ -362,7 +407,7 @@ async def giveaway(interaction: discord.Interaction, prize: str, duration_minute
     
     embed = discord.Embed(
         title="🎉 **قيف أوي جديد | GIVEAWAY** 🎉",
-        description=f"> **الجائزة:** `{prize}`\n> **عدد الفائزين:** `{winners_count}`\n> **ينتهي خلال:** `{duration_minutes} دقائق`\n\nاضغط على الزر بالأفل للمشاركة بالمسابقة!",
+        description=f"> **الجائزة:** `{prize}`\n> **عدد الفائزين:** `{winners_count}`\n> **ينتهي خلال:** `{duration_minutes} دقائق`\n\nاضغط على الزر أدناه للمشاركة بالمسابقة!",
         color=discord.Color.from_rgb(255, 215, 0)
     )
     embed.set_footer(text=f"أنشئ بواسطة {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
@@ -372,13 +417,10 @@ async def giveaway(interaction: discord.Interaction, prize: str, duration_minute
     
     await interaction.response.send_message(f"✅ تم بدء القيف أوي بنجاح في الروم {channel.mention}!", ephemeral=True)
 
-    # مؤقت انتهاء المسابقة واختيار الفائزين عشوائياً
     await asyncio.sleep(duration_minutes * 60)
     
-    # جلب الرسالة المحدثة وتحديث الزر أو إغلاقه
     try:
         fetched_msg = await channel.fetch_message(msg.id)
-        # تعطيل الزر عند انتهاء الوقت
         for child in view.children:
             child.disabled = True
         
