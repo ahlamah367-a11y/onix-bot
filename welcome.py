@@ -197,6 +197,156 @@ async def panel_slash(interaction: discord.Interaction, description: str, button
 
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ تم إنشاء البانل بنجاح داخل الإيمبد!", ephemeral=True)
+import os
+import discord
+from discord.ext import commands
+from discord import app_commands
+
+intents = discord.Intents.default()
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# الأيديات القديمة الخاصة بك (ترحيب وغيرها...)
+WELCOME_CHANNEL_ID = 1532952608363516025
+RULES_CHANNEL_ID = 153295154619372554
+NEWS_CHANNEL_ID = 1532952352250925056
+GIVEAWAY_CHANNEL_ID = 1532946535363510292
+GUILD_ID = 1532326696714240062
+
+@bot.event
+async def on_ready():
+    print(f"ONIX BOT بنجاح {bot.user.name}")
+    try:
+        guild = discord.Object(id=GUILD_ID)
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+        print("تم مزامنة أوامر السلاش بنجاح")
+    except Exception as e:
+        print(f"خطأ في مزامنة الأوامر {e}")
+
+@bot.event
+async def on_member_join(member):
+    # كود الترحيب القديم الخاص بك...
+    pass
+
+
+# ==========================================
+# ⬇️ ضع كود التكتات الكامل هنا في الأسفل ⬇️
+# ==========================================
+
+class TicketCloseView(discord.ui.View):
+    def __init__(self, admin_role_id: int):
+        super().__init__(timeout=None)
+        self.admin_role_id = admin_role_id
+
+    @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.danger, custom_id="close_ticket_btn")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        is_admin = any(role.id == self.admin_role_id for role in interaction.user.roles)
+        if not is_admin and interaction.user.name not in interaction.channel.name:
+            await interaction.response.send_message("ليس لديك صلاحية لإغلاق هذه التذكرة!", ephemeral=True)
+            return
+        
+        await interaction.response.send_message("جاري إغلاق التذكرة...")
+        await interaction.channel.delete()
+
+class TicketPanelView(discord.ui.View):
+    def __init__(self, ticket_name_format, open_category, admin_role, welcome_message, mention_target, close_category, lock_channel):
+        super().__init__(timeout=None)
+        self.ticket_name_format = ticket_name_format
+        self.open_category = open_category
+        self.admin_role = admin_role
+        self.welcome_message = welcome_message
+        self.mention_target = mention_target
+        self.close_category = close_category
+        self.lock_channel = lock_channel
+
+    @discord.ui.button(label="فتح تذكرة", style=discord.ButtonStyle.success, custom_id="open_ticket_btn")
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        user = interaction.user
+
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=not self.lock_channel),
+            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            self.admin_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+
+        ticket_channel_name = self.ticket_name_format.replace("{user}", user.name)
+
+        ticket_channel = await guild.create_text_channel(
+            name=ticket_channel_name,
+            category=self.open_category,
+            overwrites=overwrites
+        )
+
+        mentions_text = f"{user.mention} {self.admin_role.mention}"
+        if self.mention_target:
+            mentions_text += f" {self.mention_target}"
+
+        embed = discord.Embed(title="تذكرة جديدة", description=self.welcome_message, color=discord.Color.blue())
+        view = TicketCloseView(admin_role_id=self.admin_role.id)
+        await ticket_channel.send(content=mentions_text, embed=embed, view=view)
+        await interaction.response.send_message(f"تم إنشاء تذكرتك بنجاح: {ticket_channel.mention}", ephemeral=True)
+
+
+@bot.tree.command(name="setup-ticket", description="إنشاء بانل التكتات بكامل الخيارات")
+@app_commands.describe(
+    panel_room="روم إرسال البانل",
+    panel_description="وصف داخل البانل",
+    button_name="اسم زر البانل",
+    open_category="كاتجوري مكان التكتات المفتوحة",
+    close_category="كاتجوري التكت المغلقة",
+    lock_channel="قفل الروم داخل التكت يظهر فقط للي له صلاحية",
+    ticket_name="اسم التذكرة",
+    admin_role="رتبة مسؤول الإدارة",
+    welcome_message="رسالة التي ترسل داخل التذكرة",
+    panel_image_emoji="رابط الصورة أو الإيموجي للبانل",
+    mentions="تحديد منشن الرتب أو الأشخاص عند فتح التذكرة"
+)
+async def setup_ticket(
+    interaction: discord.Interaction,
+    panel_room: discord.TextChannel,
+    panel_description: str,
+    button_name: str,
+    open_category: discord.CategoryChannel,
+    close_category: discord.CategoryChannel,
+    lock_channel: bool,
+    ticket_name: str,
+    admin_role: discord.Role,
+    welcome_message: str,
+    panel_image_emoji: str = None,
+    mentions: str = None
+):
+    embed = discord.Embed(description=panel_description, color=discord.Color.green())
+    if panel_image_emoji:
+        if panel_image_emoji.startswith("http"):
+            embed.set_image(url=panel_image_emoji)
+        else:
+            embed.set_thumbnail(url=panel_image_emoji)
+
+    class CustomPanelView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)
+            
+        @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
+        async def custom_open(self, inter: discord.Interaction, btn: discord.ui.Button):
+            view_logic = TicketPanelView(
+                ticket_name_format=ticket_name,
+                open_category=open_category,
+                admin_role=admin_role,
+                welcome_message=welcome_message,
+                mention_target=mentions,
+                close_category=close_category,
+                lock_channel=lock_channel
+            )
+            await view_logic.create_ticket(inter, btn)
+
+    await panel_room.send(embed=embed, view=CustomPanelView())
+    await interaction.response.send_message("تم إنشاء بانل التكتات بنجاح!", ephemeral=True)
+
+# سطر التشغيل الأساسي يبقى في النهاية كما هو:
 
 bot.run(os.getenv("DISCORD_TOKEN"))
 
