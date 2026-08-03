@@ -8,7 +8,6 @@ import random
 import asyncio
 import re
 
-
 app = Flask('')
 
 @app.route('/')
@@ -235,8 +234,9 @@ class TicketPanelView(discord.ui.View):
         self.close_category = close_category
         self.lock_channel = lock_channel
 
-    @discord.ui.button(label="فتح تذكرة", style=discord.ButtonStyle.success, custom_id="open_ticket_btn")
-    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def create_ticket(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         guild = interaction.guild
         user = interaction.user
 
@@ -261,7 +261,36 @@ class TicketPanelView(discord.ui.View):
         embed = discord.Embed(title="تذكرة جديدة", description=self.welcome_message, color=discord.Color.blue())
         view = TicketCloseView(admin_role_id=self.admin_role.id)
         await ticket_channel.send(content=mentions_text, embed=embed, view=view)
-        await interaction.response.send_message(f"تم إنشاء تذكرتك بنجاح: {ticket_channel.mention}", ephemeral=True)
+        await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح: {ticket_channel.mention}", ephemeral=True)
+
+class CustomTicketPanelView(discord.ui.View):
+    def __init__(self, ticket_name, open_category, admin_role, welcome_message, mentions, close_category, lock_channel, button_name):
+        super().__init__(timeout=None)
+        self.ticket_name = ticket_name
+        self.open_category = open_category
+        self.admin_role = admin_role
+        self.welcome_message = welcome_message
+        self.mentions = mentions
+        self.close_category = close_category
+        self.lock_channel = lock_channel
+
+        self.add_item(CustomTicketButton(button_name))
+
+class CustomTicketButton(discord.ui.Button):
+    def __init__(self, button_name):
+        super().__init__(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
+
+    async def callback(self, interaction: discord.Interaction):
+        view_logic = TicketPanelView(
+            ticket_name_format=self.view.ticket_name,
+            open_category=self.view.open_category,
+            admin_role=self.view.admin_role,
+            welcome_message=self.view.welcome_message,
+            mention_target=self.view.mentions,
+            close_category=self.view.close_category,
+            lock_channel=self.view.lock_channel
+        )
+        await view_logic.create_ticket(interaction)
 
 @bot.tree.command(name="setup-ticket", description="إنشاء بانل التكتات بكامل الخيارات")
 @app_commands.describe(
@@ -298,24 +327,17 @@ async def setup_ticket(
         else:
             embed.set_thumbnail(url=panel_image_emoji)
 
-    class CustomTicketPanelView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
+    view = CustomTicketPanelView(
+        ticket_name=ticket_name,
+        open_category=open_category,
+        admin_role=admin_role,
+        welcome_message=welcome_message,
+        mentions=mentions,
+        close_category=close_category,
+        lock_channel=lock_channel,
+        button_name=button_name
+    )
 
-                @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
-        async def custom_open(self, inter: discord.Interaction, button: discord.ui.Button):
-            view_logic = TicketPanelView(
-                ticket_name_format=ticket_name,
-                open_category=open_category,
-                admin_role=admin_role,
-                welcome_message=welcome_message,
-                mention_target=mentions,
-                close_category=close_category,
-                lock_channel=lock_channel
-            )
-            await view_logic.create_ticket(inter)
-
-    view = CustomTicketPanelView()
     await panel_room.send(embed=embed, view=view)
     await interaction.response.send_message("تم إنشاء بانل التكتات بنجاح!", ephemeral=True)
 
