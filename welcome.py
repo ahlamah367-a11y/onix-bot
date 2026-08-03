@@ -61,7 +61,7 @@ async def auto_ping_task():
             except Exception as e:
                 print(f"خطأ في إرسال الـ Ping: {e}")
 
-# ==================== نظام الترحيب الثابت والمطابق تماماً ====================
+# ==================== نظام الترحيب الثابت مع صورة بروفايل العضو والروابط الصحيحة ====================
 @bot.event
 async def on_member_join(member: discord.Member):
     global welcome_channel_id
@@ -73,11 +73,11 @@ async def on_member_join(member: discord.Member):
                 f"> أنرت السيرفر يا {member.mention}\n\n"
                 f"> ترتيبك بين الأعضاء: **{member.guild.member_count}**\n\n"
                 f"> يرجى قراءة القوانين والالتزام بها:\n"
-                f"> <#132456789012345678> **· 🟪 「 القوانين 」**\n\n"
+                f"> <#1532951546193772554> **· 🟪 「 القوانين 」**\n\n"
                 f"> تابع آخر أخبار السيرفر:\n"
-                f"> <#132456789012345678> **· 📢 「 اخبار 」**\n\n"
+                f"> <#1532326696714240062> **· 📢 「 اخبار 」**\n\n"
                 f"> لا تفوتك آخر الهدايا والقيم:\n"
-                f"> <#132456789012345678> **· 🎁 「 الهدايا 」**"
+                f"> <#1532952352250925056> **· 🎁 「 الهدايا 」**"
             )
 
             embed = discord.Embed(
@@ -85,7 +85,8 @@ async def on_member_join(member: discord.Member):
                 color=discord.Color.from_rgb(15, 15, 15)
             )
             
-            embed.set_thumbnail(url="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe")
+            # وضع صورة بروفايل العضو الذي انضم كصورة مصغرة للإيمبد
+            embed.set_thumbnail(url=member.display_avatar.url)
             embed.set_footer(text="✨ ONIX COMMUNITY ✨\nWelcome to our family")
                 
             try:
