@@ -16,7 +16,6 @@ def home():
     return "Bot is running!"
 
 def run():
-    # استخدام البورت الذي يحدده Render تلقائياً، وإذا لم يوجد يستخدم 8080
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
@@ -26,19 +25,17 @@ def keep_alive():
 
 keep_alive()
 
-# --- إعدادات البوت والـ Intents ---
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# الأيديات المحددة
-WELCOME_CHANNEL_ID = 1532952608363516025  # روم الترحيب
-RULES_CHANNEL_ID = 1532951546193772554     # روم القوانين
-NEWS_CHANNEL_ID = 1532952352250925056      # روم الأخبار
-GIVEAWAY_CHANNEL_ID = 1532946535363510292  # روم الهدايا
-GUILD_ID = 1532326696714240062             # آيدي السيرفر
+WELCOME_CHANNEL_ID = 1532952608363516025
+RULES_CHANNEL_ID = 1532951546193772554
+NEWS_CHANNEL_ID = 1532952352250925056
+GIVEAWAY_CHANNEL_ID = 1532946535363510292
+GUILD_ID = 1532326696714240062
 
 @bot.event
 async def on_ready():
@@ -51,7 +48,6 @@ async def on_ready():
     except Exception as e:
         print(f"خطأ في مزامنة الأوامر: {e}")
 
-# --- نظام الترحيب ---
 @bot.event
 async def on_member_join(member):
     if member.guild.id != GUILD_ID:
@@ -60,7 +56,6 @@ async def on_member_join(member):
     channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
     if channel:
         member_number = member.guild.member_count
-
         rules_link = f"<#{RULES_CHANNEL_ID}>"
         news_link = f"<#{NEWS_CHANNEL_ID}>"
         giveaway_link = f"<#{GIVEAWAY_CHANNEL_ID}>"
@@ -87,7 +82,6 @@ async def on_member_join(member):
 
         await channel.send(content=text_content, embed=embed)
 
-# --- نظام القيف أواي (Giveaway) ---
 def parse_duration(duration_str: str) -> int:
     duration_str = duration_str.lower().strip()
     match = re.match(r"^(\d+)\s*([smhd]?)$", duration_str)
@@ -183,7 +177,6 @@ async def giveaway_slash(interaction: discord.Interaction, prize: str, duration:
     else:
         await channel.send(f"❌ انتهى القيف أواي لـ **{prize}**، للأسف لم يشارك أي أحد في السحب!")
 
-# --- نظام الـ Panel العادي ---
 class CustomPanelView(discord.ui.View):
     def __init__(self, response_text: str):
         super().__init__(timeout=None)
@@ -216,7 +209,6 @@ async def panel_slash(interaction: discord.Interaction, description: str, button
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ تم إنشاء البانل بنجاح داخل الإيمبد!", ephemeral=True)
 
-# --- نظام التكتات المتكامل (Tickets) ---
 class TicketCloseView(discord.ui.View):
     def __init__(self, admin_role_id: int):
         super().__init__(timeout=None)
@@ -271,7 +263,6 @@ class TicketPanelView(discord.ui.View):
         await ticket_channel.send(content=mentions_text, embed=embed, view=view)
         await interaction.response.send_message(f"تم إنشاء تذكرتك بنجاح: {ticket_channel.mention}", ephemeral=True)
 
-
 @bot.tree.command(name="setup-ticket", description="إنشاء بانل التكتات بكامل الخيارات")
 @app_commands.describe(
     panel_room="روم إرسال البانل",
@@ -308,23 +299,24 @@ async def setup_ticket(
             embed.set_thumbnail(url=panel_image_emoji)
 
     class CustomTicketPanelView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-        super().__init__(timeout=None)
+        def __init__(self):
+            super().__init__(timeout=None)
 
-    @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
-    async def custom_open(self, inter: discord.Interaction, button: discord.ui.Button):
-        view_logic = TicketPanelView(
-            ticket_name_format=ticket_name,
-            open_category=open_category,
-            admin_role=admin_role,
-            welcome_message=welcome_message,
-            mention_target=mentions,
-            close_category=close_category,
-            lock_channel=lock_channel
-        )
-        await view_logic.create_ticket(inter)
+        @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
+        async def custom_open(self, inter: discord.Interaction, button: discord.ui.Button):
+            view_logic = TicketPanelView(
+                ticket_name_format=ticket_name,
+                open_category=open_category,
+                admin_role=admin_role,
+                welcome_message=welcome_message,
+                mention_target=mentions,
+                close_category=close_category,
+                lock_channel=lock_channel
+            )
+            await view_logic.create_ticket(inter, button)
 
+    view = CustomTicketPanelView()
+    await panel_room.send(embed=embed, view=view)
     await interaction.response.send_message("تم إنشاء بانل التكتات بنجاح!", ephemeral=True)
 
-# --- تشغيل البوت النهائي ---
 bot.run(os.getenv("DISCORD_TOKEN"))
