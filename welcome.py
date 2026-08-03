@@ -209,9 +209,11 @@ async def panel_slash(interaction: discord.Interaction, description: str, button
     await interaction.response.send_message("✅ تم إنشاء البانل بنجاح داخل الإيمبد!", ephemeral=True)
 
 class TicketCloseView(discord.ui.View):
-    def __init__(self, admin_role_id: int):
+    def __init__(self, admin_role_id: int, ticket_logs_channel: discord.TextChannel = None, tqeem_room: discord.TextChannel = None):
         super().__init__(timeout=None)
         self.admin_role_id = admin_role_id
+        self.ticket_logs_channel = ticket_logs_channel
+        self.tqeem_room = tqeem_room
 
     @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.danger, custom_id="close_ticket_btn")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -220,11 +222,31 @@ class TicketCloseView(discord.ui.View):
             await interaction.response.send_message("ليس لديك صلاحية لإغلاق هذه التذكرة!", ephemeral=True)
             return
         
-        await interaction.response.send_message("جاري إغلاق التذكرة...")
+        await interaction.response.send_message("جاري إغلاق التذكرة وحفظ السجلات...")
+        
+        # إرسال سجل الإغلاق لوجد روم اللوجز
+        if self.ticket_logs_channel:
+            log_embed = discord.Embed(
+                title="🔒 إغلاق تذكرة",
+                description=ف"تم إغلاق التذكرة بواسطة: {interaction.user.mention}\nاسم الروم: `{interaction.channel.name}`",
+                color=discord.Color.red()
+            )
+            try:
+                await self.ticket_logs_channel.send(embed=log_embed)
+            except:
+                pass
+
+        # إرسال رابط التقييم لو وجد روم التقييم
+        if self.tqeem_room:
+            try:
+                await self.tqeem_room.send(f"⭐ تقييم خدمة الدعم المقدمة من {interaction.user.mention} في التذكرة المغلقة.")
+            except:
+                pass
+
         await interaction.channel.delete()
 
 class TicketPanelView(discord.ui.View):
-    def __init__(self, ticket_name_format, open_category, admin_role, welcome_message, mention_target, close_category, lock_channel):
+    def __init__(self, ticket_name_format, open_category, admin_role, welcome_message, mention_target, close_category, lock_channel, ticket_logs, tqeem_room, ownership, reason, username_number, admin_perm, welcome_image, line_url):
         super().__init__(timeout=None)
         self.ticket_name_format = ticket_name_format
         self.open_category = open_category
@@ -233,6 +255,14 @@ class TicketPanelView(discord.ui.View):
         self.mention_target = mention_target
         self.close_category = close_category
         self.lock_channel = lock_channel
+        self.ticket_logs = ticket_logs
+        self.tqeem_room = tqeem_room
+        self.ownership = ownership
+        self.reason = reason
+        self.username_number = username_number
+        self.admin_perm = admin_perm
+        self.welcome_image = welcome_image
+        self.line_url = line_url
 
     async def create_ticket(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -240,13 +270,24 @@ class TicketPanelView(discord.ui.View):
         guild = interaction.guild
         user = interaction.user
 
+        # تحديد التسمية بناءً على خيار (يوزر العضو أم رقم)
+        if self.username_number and "رقم" in self.username_number.lower():
+            # توليد رقم عشوائي أو تسلسلي بسيط
+            ticket_suffix = str(random.randint(1000, 9999))
+        else:
+            ticket_suffix = user.name
+
+        ticket_channel_name = self.ticket_name_format.replace("{user}", ticket_suffix)
+
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=not self.lock_channel),
             user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             self.admin_role: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
 
-        ticket_channel_name = self.ticket_name_format.replace("{user}", user.name)
+        if self.admin_perm:
+            # تخصيص إضافي لرتبة مسؤول الأدمنية لو وجدت
+            overwrites[self.admin_perm] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         ticket_channel = await guild.create_text_channel(
             name=ticket_channel_name,
@@ -258,13 +299,26 @@ class TicketPanelView(discord.ui.View):
         if self.mention_target:
             mentions_text += f" {self.mention_target}"
 
-        embed = discord.Embed(title="تذكرة جديدة", description=self.welcome_message, color=discord.Color.blue())
-        view = TicketCloseView(admin_role_id=self.admin_role.id)
+        # تجهيز الرسالة الترحيبية والإيمبد
+        embed = discord.Embed(title="تذكرة جديدة", description=self.welcome_message, color=discord.Color.from_rgb(30, 30, 30))
+        if self.welcome_image:
+            embed.set_image(url=self.welcome_image)
+
+        view = TicketCloseView(
+            admin_role_id=self.admin_role.id,
+            ticket_logs_channel=self.ticket_logs,
+            tqeem_room=self.tqeem_room
+        )
+
+        # إرسال الخط (Line) لو تم توفيره
+        if self.line_url:
+            await ticket_channel.send(self.line_url)
+
         await ticket_channel.send(content=mentions_text, embed=embed, view=view)
         await interaction.followup.send(f"تم إنشاء تذكرتك بنجاح: {ticket_channel.mention}", ephemeral=True)
 
 class CustomTicketPanelView(discord.ui.View):
-    def __init__(self, ticket_name, open_category, admin_role, welcome_message, mentions, close_category, lock_channel, button_name):
+    def __init__(self, ticket_name, open_category, admin_role, welcome_message, mentions, close_category, lock_channel, button_name, ticket_logs, tqeem_room, ownership, reason, username_number, admin_perm, welcome_image, line_url):
         super().__init__(timeout=None)
         self.ticket_name = ticket_name
         self.open_category = open_category
@@ -273,6 +327,14 @@ class CustomTicketPanelView(discord.ui.View):
         self.mentions = mentions
         self.close_category = close_category
         self.lock_channel = lock_channel
+        self.ticket_logs = ticket_logs
+        self.tqeem_room = tqeem_room
+        self.ownership = ownership
+        self.reason = reason
+        self.username_number = username_number
+        self.admin_perm = admin_perm
+        self.welcome_image = welcome_image
+        self.line_url = line_url
 
         self.add_item(CustomTicketButton(button_name))
 
@@ -288,57 +350,80 @@ class CustomTicketButton(discord.ui.Button):
             welcome_message=self.view.welcome_message,
             mention_target=self.view.mentions,
             close_category=self.view.close_category,
-            lock_channel=self.view.lock_channel
+            lock_channel=self.view.lock_channel,
+            ticket_logs=self.view.ticket_logs,
+            tqeem_room=self.view.tqeem_room,
+            ownership=self.view.ownership,
+            reason=self.view.reason,
+            username_number=self.view.username_number,
+            admin_perm=self.view.admin_perm,
+            welcome_image=self.view.welcome_image,
+            line_url=self.view.line_url
         )
         await view_logic.create_ticket(interaction)
 
-@bot.tree.command(name="setup-ticket", description="إنشاء بانل التكتات بكامل الخيارات")
+@bot.tree.command(name="ticket-setup", description="إنشاء بانل التكتات بكامل الخيارات المتقدمة")
 @app_commands.describe(
-    panel_room="روم إرسال البانل",
-    panel_description="وصف داخل البانل",
-    button_name="اسم زر البانل",
-    open_category="كاتجوري مكان التكتات المفتوحة",
-    close_category="كاتجوري التكت المغلقة",
-    lock_channel="قفل الروم داخل التكت يظهر فقط للي له صلاحية",
-    ticket_name="اسم التذكرة",
-    admin_role="رتبة مسؤول الإدارة",
-    welcome_message="رسالة التي ترسل داخل التذكرة",
-    panel_image_emoji="رابط الصورة أو الإيموجي للبانل",
-    mentions="تحديد منشن الرتب أو الأشخاص عند فتح التذكرة"
+    ticket="اسم التذكرة (مثال: support-{user})",
+    category="كاتجوري التذاكر الجديدة",
+    role="الرول الخاصة بادارة التذكرة",
+    ticket_logs="روم ارسال التذاكر المغلقة (Logs)",
+    close_catejory="كاتجوري التكتات المغلقة",
+    tqeem_room="روم ارسال تقييم مستلم التذكرة",
+    ownership="تفعيل استدعاء الاونر شيب او الغاءه",
+    reason="سبب فتح التذكرة تفعيل او الغاء",
+    username_number="اسم التذكرة يوزر العضو ام رقم؟",
+    admin="رتبة مسؤول الادمنية",
+    welcome_msg="الرسالة التي ترسل داخل التذكرة",
+    welcome_image="رابط الصورة التي ترسل داخل التذكرة",
+    mentions="تحديد منشن الرتب او الاشخاص عند فتح تذكرة",
+    line="تعيين رابط صورة الخط (Line)"
 )
-async def setup_ticket(
+async def ticket_setup(
     interaction: discord.Interaction,
-    panel_room: discord.TextChannel,
-    panel_description: str,
-    button_name: str,
-    open_category: discord.CategoryChannel,
-    close_category: discord.CategoryChannel,
-    lock_channel: bool,
-    ticket_name: str,
-    admin_role: discord.Role,
-    welcome_message: str,
-    panel_image_emoji: str = None,
-    mentions: str = None
+    ticket: str,
+    category: discord.CategoryChannel,
+    role: discord.Role,
+    ticket_logs: discord.TextChannel,
+    close_catejory: discord.CategoryChannel,
+    tqeem_room: discord.TextChannel,
+    ownership: str,
+    reason: str,
+    username_number: str,
+    admin: discord.Role,
+    welcome_msg: str,
+    welcome_image: str = None,
+    mentions: str = None,
+    line: str = None
 ):
-    embed = discord.Embed(description=panel_description, color=discord.Color.green())
-    if panel_image_emoji:
-        if panel_image_emoji.startswith("http"):
-            embed.set_image(url=panel_image_emoji)
-        else:
-            embed.set_thumbnail(url=panel_image_emoji)
+    embed = discord.Embed(
+        title="✨ Ticket System Panel ✨",
+        description="اضغط على الزر أدناه لفتح تذكرة جديدة ومراسلة الإدارة.",
+        color=discord.Color.from_rgb(20, 20, 20)
+    )
+    if welcome_image:
+        embed.set_thumbnail(url=welcome_image)
 
     view = CustomTicketPanelView(
-        ticket_name=ticket_name,
-        open_category=open_category,
-        admin_role=admin_role,
-        welcome_message=welcome_message,
+        ticket_name=ticket,
+        open_category=category,
+        admin_role=role,
+        welcome_message=welcome_msg,
         mentions=mentions,
-        close_category=close_category,
-        lock_channel=lock_channel,
-        button_name=button_name
+        close_category=close_catejory,
+        lock_channel=True,
+        button_name="فتح تذكرة",
+        ticket_logs=ticket_logs,
+        tqeem_room=tqeem_room,
+        ownership=ownership,
+        reason=reason,
+        username_number=username_number,
+        admin_perm=admin,
+        welcome_image=welcome_image,
+        line_url=line
     )
 
-    await panel_room.send(embed=embed, view=view)
-    await interaction.response.send_message("تم إنشاء بانل التكتات بنجاح!", ephemeral=True)
+    await interaction.channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ تم إعداد ونشر بانل التكتات بكامل الخيارات بنجاح!", ephemeral=True)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
