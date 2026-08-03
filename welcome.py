@@ -224,11 +224,10 @@ class TicketCloseView(discord.ui.View):
         
         await interaction.response.send_message("جاري إغلاق التذكرة وحفظ السجلات...")
         
-        # إرسال سجل الإغلاق لوجد روم اللوجز
         if self.ticket_logs_channel:
             log_embed = discord.Embed(
                 title="🔒 إغلاق تذكرة",
-                description=ف"تم إغلاق التذكرة بواسطة: {interaction.user.mention}\nاسم الروم: `{interaction.channel.name}`",
+                description=f"تم إغلاق التذكرة بواسطة: {interaction.user.mention}\nاسم الروم: `{interaction.channel.name}`",
                 color=discord.Color.red()
             )
             try:
@@ -236,7 +235,6 @@ class TicketCloseView(discord.ui.View):
             except:
                 pass
 
-        # إرسال رابط التقييم لو وجد روم التقييم
         if self.tqeem_room:
             try:
                 await self.tqeem_room.send(f"⭐ تقييم خدمة الدعم المقدمة من {interaction.user.mention} في التذكرة المغلقة.")
@@ -270,9 +268,7 @@ class TicketPanelView(discord.ui.View):
         guild = interaction.guild
         user = interaction.user
 
-        # تحديد التسمية بناءً على خيار (يوزر العضو أم رقم)
         if self.username_number and "رقم" in self.username_number.lower():
-            # توليد رقم عشوائي أو تسلسلي بسيط
             ticket_suffix = str(random.randint(1000, 9999))
         else:
             ticket_suffix = user.name
@@ -286,7 +282,6 @@ class TicketPanelView(discord.ui.View):
         }
 
         if self.admin_perm:
-            # تخصيص إضافي لرتبة مسؤول الأدمنية لو وجدت
             overwrites[self.admin_perm] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         ticket_channel = await guild.create_text_channel(
@@ -299,7 +294,6 @@ class TicketPanelView(discord.ui.View):
         if self.mention_target:
             mentions_text += f" {self.mention_target}"
 
-        # تجهيز الرسالة الترحيبية والإيمبد
         embed = discord.Embed(title="تذكرة جديدة", description=self.welcome_message, color=discord.Color.from_rgb(30, 30, 30))
         if self.welcome_image:
             embed.set_image(url=self.welcome_image)
@@ -310,7 +304,6 @@ class TicketPanelView(discord.ui.View):
             tqeem_room=self.tqeem_room
         )
 
-        # إرسال الخط (Line) لو تم توفيره
         if self.line_url:
             await ticket_channel.send(self.line_url)
 
