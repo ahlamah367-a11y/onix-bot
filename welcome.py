@@ -308,7 +308,7 @@ async def setup_ticket(
             embed.set_thumbnail(url=panel_image_emoji)
 
     class CustomTicketPanelView(discord.ui.View):
-    def __init__(self):
+    def __init__(self): super().__init__(timeout=None)
         super().__init__(timeout=None)
 
     @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
