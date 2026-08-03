@@ -197,4 +197,5 @@ async def panel_slash(interaction: discord.Interaction, description: str, button
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ تم إنشاء البانل بنجاح داخل الإيمبد!", ephemeral=True)
 
-bot.run("TOKEN_HERE")
+bot.run(os.getenv("DISCORD_TOKEN"))
+
