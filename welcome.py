@@ -308,24 +308,22 @@ async def setup_ticket(
             embed.set_thumbnail(url=panel_image_emoji)
 
     class CustomTicketPanelView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-            
-        @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
-        async def custom_open(self, inter: discord.Interaction, button: discord.ui.Button):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-            view_logic = TicketPanelView(
-                ticket_name_format=ticket_name,
-                open_category=open_category,
-                admin_role=admin_role,
-                welcome_message=welcome_message,
-                mention_target=mentions,
-                close_category=close_category,
-                lock_channel=lock_channel
-            )
-             await view_logic.create_ticket(inter)
+    @discord.ui.button(label=button_name, style=discord.ButtonStyle.primary, custom_id="custom_open_ticket_btn")
+    async def custom_open(self, inter: discord.Interaction, button: discord.ui.Button):
+        view_logic = TicketPanelView(
+            ticket_name_format=ticket_name,
+            open_category=open_category,
+            admin_role=admin_role,
+            welcome_message=welcome_message,
+            mention_target=mentions,
+            close_category=close_category,
+            lock_channel=lock_channel
+        )
+        await view_logic.create_ticket(inter)
 
-    await panel_room.send(embed=embed, view=CustomTicketPanelView())
     await interaction.response.send_message("تم إنشاء بانل التكتات بنجاح!", ephemeral=True)
 
 # --- تشغيل البوت النهائي ---
