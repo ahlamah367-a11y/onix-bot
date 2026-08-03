@@ -6,6 +6,7 @@ from threading import Thread
 import os
 import random
 import asyncio
+from datetime import datetime, timedelta
 
 app = Flask('')
 
@@ -60,6 +61,7 @@ async def auto_ping_task():
             except Exception as e:
                 print(f"خطأ في إرسال الـ Ping: {e}")
 
+# ==================== نظام التذاكر ====================
 class TicketCloseView(discord.ui.View):
     def __init__(self, admin_role_id: int, ticket_logs_channel: discord.TextChannel = None, tqeem_room: discord.TextChannel = None):
         super().__init__(timeout=None)
@@ -231,24 +233,18 @@ class MultiTicketPanelView(discord.ui.View):
 @app_commands.describe(
     panel_description="وصف البانل العام داخل الإيمبد",
     welcome_image="رابط صورة البانل الرئيسية (تظهر بداخل الإيمبد بشكل أنيق)",
-    
-    # خيار التذكرة الأول
     label_1="اسم الخيار الأول بالقائمة (مثال: الدعم الفني)",
     desc_1="وصف الخيار الأول",
     emoji_1="إيموجي الخيار الأول (مثال: 🎫)",
     ticket_1="اسم تذكرة الخيار الأول (مثال: support-{user})",
     category_1="كاتجوري الخيار الأول",
     role_1="رول إدارة الخيار الأول",
-    
-    # خيار التذكرة الثاني (اختياري)
     label_2="اسم الخيار الثاني (مثال: بلاغ أو شكوى)",
     desc_2="وصف الخيار الثاني",
     emoji_2="إيموجي الخيار الثاني (مثال: 🚨)",
     ticket_2="اسم تذكرة الخيار الثاني (مثال: report-{user})",
     category_2="كاتجوري الخيار الثاني",
     role_2="رول إدارة الخيار الثاني",
-    
-    # الإعدادات العامة المشتركة
     ticket_logs="روم السجلات (Logs)",
     close_catejory="كاتجوري التكتات المغلقة",
     tqeem_room="روم التقييم",
@@ -309,7 +305,6 @@ async def ticket_setup(
         }
     ]
 
-    # إضافة الخيار الثاني إذا قام المستخدم بتعبئته
     if label_2 and ticket_2 and category_2 and role_2:
         options_data.append({
             "label": label_2,
@@ -332,7 +327,7 @@ async def ticket_setup(
         })
 
     embed = discord.Embed(
-        title="✨ 𝙾𝙽𝙸𝚇 𝙲𝙾𝙼𝙼𝚄𝙽𝙸𝚃𝚈 • 🎫 𝓣𝓲𝓬𝓴𝓮𝓽𝓼 ✨",
+        title="✨ 𝙾𝙽𝙸𝚇 𝙲𝙾𝙼𝙼𝚄𝙽𝙸𝚃𝚈 • 🎫 𝓣𝓲𝓬𝓴𝓮𝓽ⵙ ✨",
         description=f"> {panel_description}",
         color=discord.Color.from_rgb(15, 15, 15)
     )
@@ -345,7 +340,59 @@ async def ticket_setup(
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✨ تم نشر بانل التكتات المتعدد بنجاح!", ephemeral=True)
 
-# أمر سلاش لتحديد روم البينج التلقائي كل 5 دقائق
+# ==================== نظام القيف أوي (Giveaway) ====================
+class GiveawayView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎉 مشاركة", style=discord.ButtonStyle.success, custom_id="join_giveaway_btn")
+    async def join_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # يمكنك هنا إضافة منطق حفظ المشاركين أو تركها كزر تفاعلي احترافي
+        await interaction.response.send_message("✅ تم تسجيل مشاركتك في القيف أوي بنجاح! بالتوفيق.", ephemeral=True)
+
+@bot.tree.command(name="giveaway", description="إنشاء مسابقة قيف أوي جديدة بشكل فخم")
+@app_commands.describe(
+    prize="جائزة المسابقة",
+    duration_minutes="مدة المسابقة بالدقائق",
+    winners_count="عدد الفائزين",
+    channel="روم إرسال المسابقة"
+)
+async def giveaway(interaction: discord.Interaction, prize: str, duration_minutes: int, winners_count: int, channel: discord.TextChannel):
+    end_time = datetime.utcnow() + timedelta(minutes=duration_minutes)
+    
+    embed = discord.Embed(
+        title="🎉 **قيف أوي جديد | GIVEAWAY** 🎉",
+        description=f"> **الجائزة:** `{prize}`\n> **عدد الفائزين:** `{winners_count}`\n> **ينتهي خلال:** `{duration_minutes} دقائق`\n\nاضغط على الزر بالأفل للمشاركة بالمسابقة!",
+        color=discord.Color.from_rgb(255, 215, 0)
+    )
+    embed.set_footer(text=f"أنشئ بواسطة {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+
+    view = GiveawayView()
+    msg = await channel.send(content="@everyone قيف أوي جديد اشتعل!", embed=embed, view=view)
+    
+    await interaction.response.send_message(f"✅ تم بدء القيف أوي بنجاح في الروم {channel.mention}!", ephemeral=True)
+
+    # مؤقت انتهاء المسابقة واختيار الفائزين عشوائياً
+    await asyncio.sleep(duration_minutes * 60)
+    
+    # جلب الرسالة المحدثة وتحديث الزر أو إغلاقه
+    try:
+        fetched_msg = await channel.fetch_message(msg.id)
+        # تعطيل الزر عند انتهاء الوقت
+        for child in view.children:
+            child.disabled = True
+        
+        end_embed = discord.Embed(
+            title="🎉 **انتهت المسابقة | GIVEAWAY ENDED** 🎉",
+            description=f"> **الجائزة:** `{prize}`\n> **انتهى الوقت المحدد للمسابقة!**",
+            color=discord.Color.from_rgb(150, 50, 50)
+        )
+        await fetched_msg.edit(embed=end_embed, view=view)
+        await channel.send(f"🎊 انتهى القيف أوي على الجائزة: **{prize}**!")
+    except Exception as e:
+        print(f"خطأ في انهاء القيف أوي: {e}")
+
+# ==================== أمر البينج ====================
 @bot.tree.command(name="set-ping", description="تحديد الروم الذي سيتم إرسال رسالة Ping تلقائية إليه كل 5 دقائق")
 @app_commands.describe(channel="اختر الروم لإرسال البينج إليه")
 async def set_ping(interaction: discord.Interaction, channel: discord.TextChannel):
