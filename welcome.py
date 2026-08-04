@@ -251,7 +251,7 @@ class TicketSelectDropdown(discord.ui.Select):
                 )
             )
             
-        super().__init__(placeholder="اضغط هنا لاختيار قسم التذكرة المناسب...", min_values=1, max_values=1, options=discord_options, custom_id="multi_ticket_dropdown_system")
+        super().__init__(placeholder=" اضغط هنا لاختيار قسم التذكرة المناسب...", min_values=1, max_values=1, options=discord_options, custom_id="multi_ticket_dropdown_system")
 
     async def callback(self, interaction: discord.Interaction):
         selected_label = self.values[0]
@@ -294,12 +294,18 @@ class MultiTicketPanelView(discord.ui.View):
     ticket_1="اسم تذكرة الخيار الأول",
     category_1="كاتجوري الخيار الأول",
     role_1="رول إدارة الخيار الأول",
-    label_2="اسم الخيار الثاني (اختياري)",
+    label_2="اسم الخيار الثاني",
     desc_2="وصف الخيار الثاني",
     emoji_2="إيموجي الخيار الثاني",
     ticket_2="اسم تذكرة الخيار الثاني",
     category_2="كاتجوري الخيار الثاني",
     role_2="رول إدارة الخيار الثاني",
+    label_3="اسم الخيار الثالث",
+    desc_3="وصف الخيار الثالث",
+    emoji_3="إيموجي الخيار الثالث",
+    ticket_3="اسم تذكرة الخيار الثالث",
+    category_3="كاتجوري الخيار الثالث",
+    role_3="رول إدارة الخيار الثالث",
     ticket_logs="روم السجلات",
     close_catejory="كاتجوري المغلقة",
     tqeem_room="روم التقييم",
@@ -320,6 +326,18 @@ async def ticket_setup(
     ticket_1: str,
     category_1: discord.CategoryChannel,
     role_1: discord.Role,
+    label_2: str,
+    desc_2: str,
+    emoji_2: str,
+    ticket_2: str,
+    category_2: discord.CategoryChannel,
+    role_2: discord.Role,
+    label_3: str,
+    desc_3: str,
+    emoji_3: str,
+    ticket_3: str,
+    category_3: discord.CategoryChannel,
+    role_3: discord.Role,
     ticket_logs: discord.TextChannel,
     close_catejory: discord.CategoryChannel,
     tqeem_room: discord.TextChannel,
@@ -328,12 +346,6 @@ async def ticket_setup(
     username_number: str,
     admin: discord.Role,
     welcome_msg: str,
-    label_2: str = None,
-    desc_2: str = None,
-    emoji_2: str = None,
-    ticket_2: str = None,
-    category_2: discord.CategoryChannel = None,
-    role_2: discord.Role = None,
     welcome_image: str = None,
     mentions: str = None,
     line: str = None
@@ -345,17 +357,22 @@ async def ticket_setup(
             "close_category": close_catejory, "tqeem_room": tqeem_room, "ownership": ownership,
             "reason": reason, "username_number": username_number, "admin": admin,
             "welcome_msg": welcome_msg, "welcome_image": welcome_image, "mentions": mentions, "line": line
-        }
-    ]
-
-    if label_2 and ticket_2 and category_2 and role_2:
-        options_data.append({
-            "label": label_2, "description": desc_2 or "قسم مخصص", "emoji": emoji_2 or "📌", "ticket": ticket_2,
+        },
+        {
+            "label": label_2, "description": desc_2, "emoji": emoji_2, "ticket": ticket_2,
             "category": category_2, "role": role_2, "ticket_logs": ticket_logs,
             "close_category": close_catejory, "tqeem_room": tqeem_room, "ownership": ownership,
             "reason": reason, "username_number": username_number, "admin": admin,
             "welcome_msg": welcome_msg, "welcome_image": welcome_image, "mentions": mentions, "line": line
-        })
+        },
+        {
+            "label": label_3, "description": desc_3, "emoji": emoji_3, "ticket": ticket_3,
+            "category": category_3, "role": role_3, "ticket_logs": ticket_logs,
+            "close_category": close_catejory, "tqeem_room": tqeem_room, "ownership": ownership,
+            "reason": reason, "username_number": username_number, "admin": admin,
+            "welcome_msg": welcome_msg, "welcome_image": welcome_image, "mentions": mentions, "line": line
+        }
+    ]
 
     embed = discord.Embed(
         title="✨ 𝙾𝙽𝙸𝚇 𝙲𝙾𝙼𝙼𝚄𝙽𝙸𝚃𝚈 • 🎫 𝓣𝓲𝓬𝓴𝓮𝓽ⵙ ✨",
@@ -384,8 +401,17 @@ async def panel(
     button_description: str,
     panel_image: str = None
 ):
+    fancy_titles = [
+        "❖ 𝙾𝙽𝙸𝚇 🭠 𝓢𝓾𝓹𝓹𝓸𝓻𝓽 𝓝𝓮𝓽",
+        "❖ 𝙾𝙽𝙸𝚇 🭠 𝓣𝓲𝓬𝓴𝓮𝓽 𝓗𝓾𝓫",
+        "❖ 𝙾𝙽𝙸𝚇 🭠 𝓢𝓮𝓬𝓾𝓻𝓮 𝓩𝓸𝓷𝓮",
+        "❖ 𝙾𝙽𝙸𝚇 🭠 𝓔𝓵𝓲𝓽𝓮 𝓣𝓲𝓬𝓴𝓮𝓽",
+        "❖ 𝙾𝙽𝙸𝚇 🭠 𝓒𝓸𝓶𝓶𝓾𝓷𝓲𝓽𝔂 𝓗𝓮𝓵𝓹"
+    ]
+    selected_title = random.choice(fancy_titles)
+
     embed = discord.Embed(
-        title="❖ 𝙾𝙽𝙸𝚇 🭠 𝓣𝓲𝓬𝓴𝓮𝓽 𝓟𝓪𝓷𝓮𝓵",
+        title=selected_title,
         description=f"> {panel_description}",
         color=discord.Color.from_rgb(15, 15, 15)
     )
@@ -444,7 +470,6 @@ async def giveaway(interaction: discord.Interaction, prize: str, duration_minute
     
     await interaction.response.send_message(f"✅ تم بدء القيف أوي بنجاح في الروم {channel.mention}!", ephemeral=True)
     
-    # تشغيل عداد الوقت في الخلفية دون تجميد البوت
     bot.loop.create_task(background_giveaway(channel, duration_minutes, prize, msg, view))
 
 
