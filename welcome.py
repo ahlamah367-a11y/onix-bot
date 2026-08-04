@@ -478,9 +478,9 @@ async def on_ready():
 
     try:
         synced = await bot.tree.sync()
-        print(f"تمت مزامنة {len(synced)} أمر سلاش بنجاح!")
+        print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
     except Exception as e:
-        print(f"خطأ في مزامنة السلاشات: {e}")
+        print(f"خطأ في المزامنة: {e}")
 
     if not auto_ping_task.is_running():
         auto_ping_task.start()
