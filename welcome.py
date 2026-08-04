@@ -38,18 +38,19 @@ welcome_channel_id = 1532952608363516025
 
 @bot.event
 async def on_ready():
-    print(f"ONIX BOT تم تشغيل البوت بنجاح: {bot.user.name}")
+    print(f"Logged in as {bot.user}")
+    
+    # آيدي سيرفر ONIX COMMUNITY
+    guild = discord.Object(id=1532326696714240062)
     
     try:
-        guild = discord.Object(id=GUILD_ID)
+        # مزامنة الأوامر فوراً لهذا السيرفر فقط
         bot.tree.copy_global_to(guild=guild)
         await bot.tree.sync(guild=guild)
-        print("تم مزامنة أوامر السلاش في سيرفر ONIX COMMUNITY بنجاح!")
+        print("تمت مزامنة الأوامر بنجاح للسيرفر!")
     except Exception as e:
-        print(f"خطأ في مزامنة الأوامر: {e}")
-        
-    if not auto_ping_task.is_running():
-        auto_ping_task.start()
+        print(f"خطأ في المزامنة: {e}")
+
 
     
 
