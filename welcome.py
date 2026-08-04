@@ -39,15 +39,9 @@ welcome_channel_id = 1532952608363516025
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    
-    # آيدي سيرفر ONIX COMMUNITY
-    guild = discord.Object(id=1532326696714240062)
-    
     try:
-        # مزامنة الأوامر فوراً لهذا السيرفر فقط
-        bot.tree.copy_global_to(guild=guild)
-        await bot.tree.sync(guild=guild)
-        print("تمت مزامنة الأوامر بنجاح للسيرفر!")
+        synced = await bot.tree.sync()
+        print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
     except Exception as e:
         print(f"خطأ في المزامنة: {e}")
 
