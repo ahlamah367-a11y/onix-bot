@@ -39,6 +39,11 @@ welcome_channel_id = 1532952608363516025
 @bot.event
 async def on_ready():
     print(f"ONIX BOT تم تشغيل البوت بنجاح: {bot.user.name}")
+    
+    # تسجيل الأزرار لكي تعمل بشكل دائم ولا تحتاج لإعادة إنشائها
+    bot.add_view(SingleTicketButtonView("فتح تذكرة", "نظام التذاكر"))
+    bot.add_view(GiveawayView())
+    
     try:
         guild = discord.Object(id=GUILD_ID)
         bot.tree.copy_global_to(guild=guild)
@@ -402,30 +407,8 @@ class GiveawayView(discord.ui.View):
     async def join_giveaway(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("✅ تم تسجيل مشاركتك في المسابقة بنجاح!", ephemeral=True)
 
-@bot.tree.command(name="giveaway", description="إنشاء مسابقة قيف أوي جديدة بشكل فخم")
-@app_commands.describe(
-    prize="جائزة المسابقة",
-    duration_minutes="مدة المسابقة بالدقائق",
-    winners_count="عدد الفائزين",
-    channel="روم إرسال المسابقة"
-)
-async def giveaway(interaction: discord.Interaction, prize: str, duration_minutes: int, winners_count: int, channel: discord.TextChannel):
-    end_time = datetime.utcnow() + timedelta(minutes=duration_minutes)
-    
-    embed = discord.Embed(
-        title="🎉 **قيف أوي جديد | GIVEAWAY** 🎉",
-        description=f"> **الجائزة:** `{prize}`\n> **عدد الفائزين:** `{winners_count}`\n> **ينتهي خلال:** `{duration_minutes} دقائق`\n\nاضغط على الزر أدناه للمشاركة بالمسابقة!",
-        color=discord.Color.from_rgb(255, 215, 0)
-    )
-    embed.set_footer(text=f"أنشئ بواسطة {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
-
-    view = GiveawayView()
-    msg = await channel.send(content="@everyone قيف أوي جديد اشتعل!", embed=embed, view=view)
-    
-    await interaction.response.send_message(f"✅ تم بدء القيف أوي بنجاح في الروم {channel.mention}!", ephemeral=True)
-
+async def background_giveaway(channel, duration_minutes, prize, msg, view):
     await asyncio.sleep(duration_minutes * 60)
-    
     try:
         fetched_msg = await channel.fetch_message(msg.id)
         for child in view.children:
@@ -440,6 +423,30 @@ async def giveaway(interaction: discord.Interaction, prize: str, duration_minute
         await channel.send(f"🎊 انتهى القيف أوي على الجائزة: **{prize}**!")
     except Exception as e:
         print(f"خطأ في انهاء القيف أوي: {e}")
+
+@bot.tree.command(name="giveaway", description="إنشاء مسابقة قيف أوي جديدة بشكل فخم")
+@app_commands.describe(
+    prize="جائزة المسابقة",
+    duration_minutes="مدة المسابقة بالدقائق",
+    winners_count="عدد الفائزين",
+    channel="روم إرسال المسابقة"
+)
+async def giveaway(interaction: discord.Interaction, prize: str, duration_minutes: int, winners_count: int, channel: discord.TextChannel):
+    embed = discord.Embed(
+        title="🎉 **قيف أوي جديد | GIVEAWAY** 🎉",
+        description=f"> **الجائزة:** `{prize}`\n> **عدد الفائزين:** `{winners_count}`\n> **ينتهي خلال:** `{duration_minutes} دقائق`\n\nاضغط على الزر أدناه للمشاركة بالمسابقة!",
+        color=discord.Color.from_rgb(255, 215, 0)
+    )
+    embed.set_footer(text=f"أنشئ بواسطة {interaction.user.name}", icon_url=interaction.user.display_avatar.url)
+
+    view = GiveawayView()
+    msg = await channel.send(content="@everyone قيف أوي جديد اشتعل!", embed=embed, view=view)
+    
+    await interaction.response.send_message(f"✅ تم بدء القيف أوي بنجاح في الروم {channel.mention}!", ephemeral=True)
+    
+    # تشغيل عداد الوقت في الخلفية دون تجميد البوت
+    bot.loop.create_task(background_giveaway(channel, duration_minutes, prize, msg, view))
+
 
 @bot.tree.command(name="set-ping", description="تحديد الروم الذي سيتم إرسال رسالة Ping تلقائية إليه كل 5 دقائق")
 @app_commands.describe(channel="اختر الروم لإرسال البينج إليه")
