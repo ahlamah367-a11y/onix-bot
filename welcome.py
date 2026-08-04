@@ -45,9 +45,8 @@ async def on_ready():
     bot.add_view(GiveawayView())
     
     try:
-        guild = discord.Object(id=GUILD_ID)
-        bot.tree.copy_global_to(guild=guild)
-        await bot.tree.sync(guild=guild)
+        # مزامنة عامة (Global) لتظهر الأوامر في جميع السيرفرات فوراً
+        await bot.tree.sync()
         print("تم مزامنة أوامر السلاش بنجاح!")
     except Exception as e:
         print(f"خطأ في مزامنة الأوامر: {e}")
