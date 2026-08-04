@@ -36,21 +36,6 @@ ping_channel_id = None
 # تم تثبيت روم الترحيب تلقائياً على الرابط الذي أرسلته
 welcome_channel_id = 1532952608363516025
 
-@bot.event
-async def on_ready():
-    print("====== ON_READY WORKING ======")
-    print(f"Logged in as {bot.user}")
-
-    try:
-        synced = await bot.tree.sync()
-        print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
-    except Exception as e:
-        print(f"خطأ في المزامنة: {e}")
-
-    if not auto_ping_task.is_running():
-        auto_ping_task.start()
-
-    
 
 @tasks.loop(minutes=5)
 async def auto_ping_task():
@@ -476,5 +461,15 @@ async def set_ping(interaction: discord.Interaction, channel: discord.TextChanne
     global ping_channel_id
     ping_channel_id = channel.id
     await interaction.response.send_message(f"✅ تم تفعيل بنج البوت التلقائي بنجاح في الروم: {channel.mention} (كل 5 دقائق).", ephemeral=True)
-print("BOT STARTING NOW")
+print("قبل التشغيل")
+
+@bot.event
+async def on_connect():
+    print("====== ON_CONNECT اشتغل ======")
+
+@bot.event
+async def on_ready():
+    print("====== READY اشتغل ======")
+    print(bot.user)
+
 bot.run(os.getenv("DISCORD_TOKEN"))
