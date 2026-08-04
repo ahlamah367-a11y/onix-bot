@@ -467,9 +467,6 @@ async def set_ping(interaction: discord.Interaction, channel: discord.TextChanne
     )
 
 
-@bot.event
-async def on_connect():
-    print("====== ON_CONNECT اشتغل ======", flush=True)
 
 
 @bot.event
@@ -483,13 +480,12 @@ async def on_ready():
     except Exception as e:
         print(f"خطأ في المزامنة: {e}")
 
-    if not auto_ping_task.is_running():
-        auto_ping_task.start()
-        print("تم تشغيل Auto Ping"), flush=True)
+    try:
+        if not auto_ping_task.is_running():
+            auto_ping_task.start()
+            print("تم تشغيل Auto Ping", flush=True)
     except Exception as e:
         print(f"خطأ Auto Ping: {e}", flush=True)
-
-
 print("قبل التشغيل", flush=True)
 
 TOKEN = os.getenv("DISCORD_TOKEN")
