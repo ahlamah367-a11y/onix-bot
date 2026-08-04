@@ -479,8 +479,8 @@ async def on_ready():
 
     # مزامنة أوامر السلاش
     try:
-        synced = await bot.tree.sync()
-        print(f"تمت مزامنة {len(synced)} أمر بنجاح!", flush=True)
+        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
     except Exception as e:
         print(f"خطأ في المزامنة: {e}", flush=True)
 
