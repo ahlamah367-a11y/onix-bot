@@ -474,21 +474,18 @@ async def on_connect():
 
 @bot.event
 async def on_ready():
-    print("====== READY اشتغل ======", flush=True)
-    print(f"Logged in as {bot.user}", flush=True)
+    print("====== READY اشتغل ======")
+    print(f"Logged in as {bot.user}")
 
-    # مزامنة أوامر السلاش
     try:
-        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
-print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
+        await bot.tree.sync()
+        print("تمت مزامنة الأوامر بنجاح!")
     except Exception as e:
-        print(f"خطأ في المزامنة: {e}", flush=True)
+        print(f"خطأ في المزامنة: {e}")
 
-    # تشغيل البينج التلقائي
-    try:
-        if not auto_ping_task.is_running():
-            auto_ping_task.start()
-            print("تم تشغيل Auto Ping", flush=True)
+    if not auto_ping_task.is_running():
+        auto_ping_task.start()
+        print("تم تشغيل Auto Ping"), flush=True)
     except Exception as e:
         print(f"خطأ Auto Ping: {e}", flush=True)
 
