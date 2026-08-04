@@ -38,13 +38,17 @@ welcome_channel_id = 1532952608363516025
 
 @bot.event
 async def on_ready():
+    print("====== ON_READY WORKING ======")
     print(f"Logged in as {bot.user}")
+
     try:
         synced = await bot.tree.sync()
         print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
     except Exception as e:
         print(f"خطأ في المزامنة: {e}")
 
+    if not auto_ping_task.is_running():
+        auto_ping_task.start()
 
     
 
