@@ -475,17 +475,16 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
     try:
-        await bot.tree.sync()
-        print("تمت مزامنة الأوامر بنجاح!")
+        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
     except Exception as e:
-        print(f"خطأ في المزامنة: {e}")
+        print(f"خطأ في المزامنة: {type(e).__name__}: {e}")
 
-    try:
-        if not auto_ping_task.is_running():
-            auto_ping_task.start()
-            print("تم تشغيل Auto Ping", flush=True)
-    except Exception as e:
-        print(f"خطأ Auto Ping: {e}", flush=True)
+    if not auto_ping_task.is_running():
+        auto_ping_task.start()
+        print("تم تشغيل Auto Ping", flush=True)
+
+
 print("قبل التشغيل", flush=True)
 
 TOKEN = os.getenv("DISCORD_TOKEN")
