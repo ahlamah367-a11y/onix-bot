@@ -476,5 +476,5 @@ async def set_ping(interaction: discord.Interaction, channel: discord.TextChanne
     global ping_channel_id
     ping_channel_id = channel.id
     await interaction.response.send_message(f"✅ تم تفعيل بنج البوت التلقائي بنجاح في الروم: {channel.mention} (كل 5 دقائق).", ephemeral=True)
-
+print("BOT STARTING NOW")
 bot.run(os.getenv("DISCORD_TOKEN"))
