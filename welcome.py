@@ -460,31 +460,46 @@ async def giveaway(interaction: discord.Interaction, prize: str, duration_minute
 async def set_ping(interaction: discord.Interaction, channel: discord.TextChannel):
     global ping_channel_id
     ping_channel_id = channel.id
+
     await interaction.response.send_message(
-        f"✅ تم تفعيل بنج البوت التلقائي بنجاح في الروم: {channel.mention} (كل 5 دقائق).",
+        f"✅ تم تفعيل بنج البوت في الروم: {channel.mention}",
         ephemeral=True
     )
 
 
 @bot.event
 async def on_connect():
-    print("====== ON_CONNECT اشتغل ======")
+    print("====== ON_CONNECT اشتغل ======", flush=True)
 
 
 @bot.event
 async def on_ready():
-    print("====== READY اشتغل ======")
-    print(f"Logged in as {bot.user}")
+    print("====== READY اشتغل ======", flush=True)
+    print(f"Logged in as {bot.user}", flush=True)
 
+    # مزامنة أوامر السلاش
     try:
         synced = await bot.tree.sync()
-        print(f"تمت مزامنة {len(synced)} أمر بنجاح!")
+        print(f"تمت مزامنة {len(synced)} أمر بنجاح!", flush=True)
     except Exception as e:
-        print(f"خطأ في المزامنة: {e}")
+        print(f"خطأ في المزامنة: {e}", flush=True)
 
-    if not auto_ping_task.is_running():
-        auto_ping_task.start()
+    # تشغيل البينج التلقائي
+    try:
+        if not auto_ping_task.is_running():
+            auto_ping_task.start()
+            print("تم تشغيل Auto Ping", flush=True)
+    except Exception as e:
+        print(f"خطأ Auto Ping: {e}", flush=True)
 
 
-print("قبل التشغيل")
-bot.run(os.getenv("DISCORD_TOKEN"))
+print("قبل التشغيل", flush=True)
+
+TOKEN = os.getenv("DISCORD_TOKEN")
+
+if TOKEN:
+    print("التوكن موجود", flush=True)
+else:
+    print("⚠️ التوكن غير موجود", flush=True)
+
+bot.run(TOKEN)
