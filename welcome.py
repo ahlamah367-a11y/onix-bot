@@ -40,19 +40,18 @@ welcome_channel_id = 1532952608363516025
 async def on_ready():
     print(f"ONIX BOT تم تشغيل البوت بنجاح: {bot.user.name}")
     
-    # تسجيل الأزرار لكي تعمل بشكل دائم ولا تحتاج لإعادة إنشائها
-    bot.add_view(SingleTicketButtonView("فتح تذكرة", "نظام التذاكر"))
-    bot.add_view(GiveawayView())
-    
     try:
-        # مزامنة عامة (Global) لتظهر الأوامر في جميع السيرفرات فوراً
-        await bot.tree.sync()
-        print("تم مزامنة أوامر السلاش بنجاح!")
+        guild = discord.Object(id=GUILD_ID)
+        bot.tree.copy_global_to(guild=guild)
+        await bot.tree.sync(guild=guild)
+        print("تم مزامنة أوامر السلاش في سيرفر ONIX COMMUNITY بنجاح!")
     except Exception as e:
         print(f"خطأ في مزامنة الأوامر: {e}")
-    
+        
     if not auto_ping_task.is_running():
         auto_ping_task.start()
+
+    
 
 @tasks.loop(minutes=5)
 async def auto_ping_task():
