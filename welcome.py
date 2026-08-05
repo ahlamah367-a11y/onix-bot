@@ -266,7 +266,7 @@ class MultiTicketPanelView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(TicketSelectDropdown(options_data))
 
-@bot.tree.command(name="ticket-setup", description="إنشاء بانل تكتات متطور يحتوي على خيارات متعددة")
+
 @app_commands.describe(
     panel_description="وصف البانل العام داخل الإيمبد",
     welcome_image="رابط صورة البانل الرئيسية",
