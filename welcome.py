@@ -484,16 +484,12 @@ async def on_ready():
         auto_ping_task.start()
         print("تم تشغيل Auto Ping", flush=True)
 
-print("قبل التشغيل", flush=True)("تم تشغيل Auto Ping", flush=True)
-
-
 print("قبل التشغيل", flush=True)
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 if TOKEN:
-    print("التوكن موجود", flush=True)
+    print("✅ التوكن موجود", flush=True)
+    bot.run(TOKEN)
 else:
     print("⚠️ التوكن غير موجود", flush=True)
-
-bot.run(TOKEN)
