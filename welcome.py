@@ -173,6 +173,18 @@ async def set_logs(interaction: discord.Interaction, channel: discord.TextChanne
     save_json(LOGS_CONFIG_FILE, config)
     await interaction.response.send_message(f"✅ تم ضبط روم السجلات بنجاح في {channel.mention}", ephemeral=True)
 
+@bot.tree.command(name="remove-logs", description="إلغاء وتفريغ إعداد روم السجلات")
+@app_commands.checks.has_permissions(administrator=True)
+async def remove_logs(interaction: discord.Interaction):
+    config = load_json(LOGS_CONFIG_FILE)
+    gid = str(interaction.guild.id)
+    if gid in config:
+        del config[gid]
+        save_json(LOGS_CONFIG_FILE, config)
+        await interaction.response.send_message("❌ تم إلغاء روم السجلات بنجاح.", ephemeral=True)
+    else:
+        await interaction.response.send_message("⚠️ روم السجلات غير مفعل أساساً.", ephemeral=True)
+
 # ==================================
 # التحقق من صلاحيات الإدارة
 # ==================================
@@ -781,6 +793,22 @@ async def application_setup(
 
     await interaction.response.send_message("✅ تم إنشاء بانل التقديم بنجاح مع زر مخصص", ephemeral=True)
 
+@bot.tree.command(name="application-remove", description="حذف وإلغاء إعداد بانل التقديم")
+@app_commands.checks.has_permissions(administrator=True)
+async def application_remove(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    if guild_id in application_config:
+        del application_config[guild_id]
+        save_application_config()
+        
+        global persistent_panels
+        persistent_panels = [p for p in persistent_panels if not (str(p.get("guild_id")) == guild_id and p.get("type") in ["application", "application_decision"])]
+        save_persistent()
+
+        await interaction.response.send_message("❌ تم إلغاء وحذف بانل التقديمات بنجاح.", ephemeral=True)
+    else:
+        await interaction.response.send_message("⚠️ إعدادات التقديمات غير مفعلة أساساً.", ephemeral=True)
+
 @bot.tree.command(name="application-role", description="تحديد الرتبة التي تعطى عند القبول")
 @app_commands.checks.has_permissions(administrator=True)
 async def application_role(interaction: discord.Interaction, role: discord.Role):
@@ -833,6 +861,17 @@ async def anti_setup(interaction: discord.Interaction):
     save_json(ANTI_CONFIG_FILE, anti_config)
     await interaction.response.send_message("✅ تم تشغيل أنظمة الحماية واستثناء الإداريين تلقائياً", ephemeral=True)
 
+@bot.tree.command(name="anti-disable", description="إلغاء وتوقف أنظمة الحماية")
+@app_commands.checks.has_permissions(administrator=True)
+async def anti_disable(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    if guild_id in anti_config:
+        del anti_config[guild_id]
+        save_json(ANTI_CONFIG_FILE, anti_config)
+        await interaction.response.send_message("❌ تم إيقاف وإلغاء أنظمة الحماية بنجاح.", ephemeral=True)
+    else:
+        await interaction.response.send_message("⚠️ أنظمة الحماية متوقفة بالفعل.", ephemeral=True)
+
 @bot.tree.command(name="announce", description="إرسال إعلان Embed")
 @app_commands.describe(channel="الروم", title="العنوان", text="النص")
 @app_commands.checks.has_permissions(administrator=True)
@@ -859,6 +898,17 @@ async def set_welcome(interaction: discord.Interaction, channel: discord.TextCha
     }
     save_json(WELCOME_CONFIG_FILE, welcome_config)
     await interaction.response.send_message(f"✅ تم ضبط نظام الترحيب التلقائي بنجاح في {channel.mention}!", ephemeral=True)
+
+@bot.tree.command(name="remove-welcome", description="إلغاء وتوقف نظام الترحيب")
+@app_commands.checks.has_permissions(administrator=True)
+async def remove_welcome(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    if guild_id in welcome_config:
+        del welcome_config[guild_id]
+        save_json(WELCOME_CONFIG_FILE, welcome_config)
+        await interaction.response.send_message("❌ تم إلغاء نظام الترحيب بنجاح.", ephemeral=True)
+    else:
+        await interaction.response.send_message("⚠️ نظام الترحيب غير مفعل أساساً.", ephemeral=True)
 
 @bot.tree.command(name="warn", description="تحذير عضو")
 @app_commands.describe(member="العضو", reason="السبب")
@@ -967,7 +1017,7 @@ async def bot_status(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 # ==================================
-# نظام Reaction Roles (Slash Command)
+# نظام Reaction Roles (Slash Command) - مع تصحيح الاستجابة
 # ==================================
 
 class ReactionRoleView(discord.ui.View):
@@ -983,17 +1033,19 @@ class ReactionRoleView(discord.ui.View):
         self.add_item(button)
 
     async def role_button(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
         role = interaction.guild.get_role(self.role_id)
         if not role:
-            await interaction.response.send_message("❌ الرتبة غير موجودة في السيرفر", ephemeral=True)
+            await interaction.followup.send("❌ الرتبة غير موجودة في السيرفر", ephemeral=True)
             return
 
         if role in interaction.user.roles:
             await interaction.user.remove_roles(role)
-            await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
+            await interaction.followup.send(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
         else:
             await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+            await interaction.followup.send(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
 
 @bot.tree.command(name="reaction-role", description="إنشاء زر للحصول على رتبة")
 @app_commands.describe(role="الرتبة", channel="الروم", text="النص الذي سيظهر")
@@ -1018,6 +1070,21 @@ async def reaction_role(interaction: discord.Interaction, role: discord.Role, ch
     bot.add_view(ReactionRoleView(role.id), message_id=msg.id)
 
     await interaction.response.send_message("✅ تم إنشاء رتبة الزر بنجاح", ephemeral=True)
+
+@bot.tree.command(name="reaction-role-remove", description="إلغاء بانل رتبة الزر وتفريغها")
+@app_commands.checks.has_permissions(administrator=True)
+async def reaction_role_remove(interaction: discord.Interaction):
+    guild_id = str(interaction.guild.id)
+    global persistent_panels
+    persistent_panels = [p for p in persistent_panels if not (str(p.get("guild_id")) == guild_id and p.get("type") == "reaction_role")]
+    save_persistent()
+    
+    keys_to_delete = [k for k, v in reaction_roles.items() if str(v.get("guild_id")) == guild_id]
+    for k in keys_to_delete:
+        del reaction_roles[k]
+    save_json(REACTION_ROLES_FILE, reaction_roles)
+
+    await interaction.response.send_message("❌ تم إزالة كافة إعدادات رتب الأزرار لهذا السيرفر بنجاح.", ephemeral=True)
 
 # ==================================
 # أحداث التشغيل والتجهيز (On Ready)
