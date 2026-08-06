@@ -67,6 +67,7 @@ REACTION_ROLES_FILE = "reaction_roles.json"
 BACKUP_FILE = "server_backup_info.json"
 ANTI_CONFIG_FILE = "anti_config.json"
 BAD_WORDS_FILE = "bad_words.json"
+PERSISTENT_FILE = "persistent_panels.json"
 
 # ملفات نظام التقديمات
 APPLICATIONS_FILE = "applications_data.json"
@@ -115,6 +116,7 @@ allowed_channels = load_json(ALLOWED_CHANNELS_FILE)
 ended_giveaways = load_json(ENDED_GIVEAWAYS_FILE)
 anti_config = load_json(ANTI_CONFIG_FILE)
 bad_words = load_json(BAD_WORDS_FILE, [])
+persistent_panels = load_json(PERSISTENT_FILE, [])
 giveaways = {}
 
 # تحميل بيانات نظام التقديمات
@@ -124,6 +126,9 @@ application_types = load_json(APPLICATION_TYPES_FILE, {})
 application_questions = load_json(APPLICATION_QUESTIONS_FILE, {})
 application_decisions = load_json(APPLICATION_DECISIONS_FILE, {})
 application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
+
+def save_persistent():
+    save_json(PERSISTENT_FILE, persistent_panels)
 
 def save_applications():
     save_json(APPLICATIONS_FILE, applications_data)
@@ -454,33 +459,45 @@ async def save_application_decision(guild, user, admin, status, reason):
     })
     save_application_decisions()
 
+class AcceptButton(discord.ui.Button):
+    def __init__(self, view):
+        super().__init__(
+            label="قبول",
+            emoji="✅",
+            style=discord.ButtonStyle.green
+        )
+        self.view_ref = view
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.view_ref.process(interaction, True)
+
+
+class RejectButton(discord.ui.Button):
+    def __init__(self, view):
+        super().__init__(
+            label="رفض",
+            emoji="❌",
+            style=discord.ButtonStyle.red
+        )
+        self.view_ref = view
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(
+            RejectReasonModal(
+                self.view_ref.user_id,
+                self.view_ref.app_id
+            )
+        )
+
+
 class ApplicationDecisionView(discord.ui.View):
     def __init__(self, user_id, app_id):
         super().__init__(timeout=None)
         self.user_id = user_id
         self.app_id = app_id
-        
-        self.add_item(discord.ui.Button(
-            label="قبول",
-            emoji="✅",
-            style=discord.ButtonStyle.green,
-            custom_id=f"app_accept_{app_id}",
-            callback=self.accept_callback
-        ))
-        
-        self.add_item(discord.ui.Button(
-            label="رفض",
-            emoji="❌",
-            style=discord.ButtonStyle.red,
-            custom_id=f"app_reject_{app_id}",
-            callback=self.reject_callback
-        ))
 
-    async def accept_callback(self, interaction: discord.Interaction):
-        await self.process(interaction, True)
-
-    async def reject_callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(RejectReasonModal(self.user_id, self.app_id))
+        self.add_item(AcceptButton(self))
+        self.add_item(RejectButton(self))
 
     async def process(self, interaction, accepted, reason="بدون سبب"):
         gid = str(interaction.guild.id)
@@ -513,7 +530,10 @@ class ApplicationDecisionView(discord.ui.View):
         if member:
             await send_application_result(member, accepted, reason, interaction.guild)
 
-        await interaction.response.send_message("✅ تم تنفيذ القرار", ephemeral=True)
+        try:
+            await interaction.response.send_message("✅ تم تنفيذ القرار", ephemeral=True)
+        except discord.InteractionResponded:
+            await interaction.followup.send("✅ تم تنفيذ القرار", ephemeral=True)
 
 class RejectReasonModal(discord.ui.Modal, title="سبب رفض التقديم"):
     def __init__(self, user_id, app_id):
@@ -607,11 +627,18 @@ class DynamicApplicationModal(discord.ui.Modal):
                     embed.add_field(name=f"السؤال {i+1}", value=answer, inline=False)
 
                 view = ApplicationDecisionView(interaction.user.id, app_id)
-                bot.add_view(view)
-                await channel.send(
-                    embed=embed,
-                    view=view
-                )
+                msg = await channel.send(embed=embed, view=view)
+                
+                # حفظ الـ Decision View بنظام الـ Persistent
+                persistent_panels.append({
+                    "type": "application_decision",
+                    "guild_id": interaction.guild.id,
+                    "channel_id": channel.id,
+                    "message_id": msg.id,
+                    "user_id": interaction.user.id,
+                    "app_id": app_id
+                })
+                save_persistent()
 
         await interaction.response.send_message("✅ تم إرسال التقديم بنجاح", ephemeral=True)
 
@@ -693,7 +720,19 @@ async def application_setup(
         embed.set_image(url=image)
 
     view = ApplicationButtonView(interaction.guild.id, button_text, button_emoji)
-    await panel_channel.send(embed=embed, view=view)
+    msg = await panel_channel.send(embed=embed, view=view)
+
+    # حفظ البانل بنظام الـ Persistent
+    persistent_panels.append({
+        "type": "application",
+        "guild_id": interaction.guild.id,
+        "channel_id": panel_channel.id,
+        "message_id": msg.id,
+        "button_text": button_text,
+        "button_emoji": button_emoji
+    })
+    save_persistent()
+
     await interaction.response.send_message("✅ تم إنشاء بانل التقديم بنجاح مع زر مخصص", ephemeral=True)
 
 @bot.tree.command(name="application-role", description="تحديد الرتبة التي تعطى عند القبول")
@@ -919,6 +958,17 @@ async def reaction_role(interaction: discord.Interaction, role: discord.Role, ch
     msg = await channel.send(embed=embed, view=ReactionRoleView(role.id))
     reaction_roles[str(msg.id)] = {"role_id": role.id, "channel_id": channel.id, "guild_id": interaction.guild.id}
     save_json(REACTION_ROLES_FILE, reaction_roles)
+
+    # حفظ نظام الـ Persistent للـ Reaction Role
+    persistent_panels.append({
+        "type": "reaction_role",
+        "guild_id": interaction.guild.id,
+        "channel_id": channel.id,
+        "message_id": msg.id,
+        "role_id": role.id
+    })
+    save_persistent()
+
     bot.add_view(ReactionRoleView(role.id), message_id=msg.id)
 
     await interaction.response.send_message("✅ تم إنشاء رتبة الزر بنجاح", ephemeral=True)
@@ -934,34 +984,38 @@ async def on_ready():
     print(f"🌐 Servers : {len(bot.guilds)}")
     print("="*40)
 
-    for msg_id, data in reaction_roles.items():
+    # إعادة تحميل كل الـ Persistent Views المحفوظة بملف persistent_panels.json
+    for panel in persistent_panels:
         try:
-            bot.add_view(ReactionRoleView(data["role_id"]), message_id=int(msg_id))
-        except Exception:
-            pass
+            ptype = panel.get("type")
+            msg_id = panel.get("message_id")
 
-    for guild_id, config_data in application_config.items():
-        try:
-            bot.add_view(ApplicationButtonView(
-                int(guild_id),
-                config_data.get("button_text", "تقديم"),
-                config_data.get("emoji", "📝")
-            ))
-        except Exception:
-            pass
-
-    for guild_apps in applications_data.values():
-        for app in guild_apps:
-            if app.get("status") == "pending":
-                try:
-                    bot.add_view(
-                        ApplicationDecisionView(
-                            app["user_id"],
-                            app["id"]
-                        )
-                    )
-                except Exception:
-                    pass
+            if ptype == "application":
+                bot.add_view(
+                    ApplicationButtonView(
+                        panel["guild_id"],
+                        panel.get("button_text", "تقديم"),
+                        panel.get("button_emoji", "📝")
+                    ),
+                    message_id=msg_id
+                )
+            elif ptype == "application_decision":
+                bot.add_view(
+                    ApplicationDecisionView(
+                        panel["user_id"],
+                        panel["app_id"]
+                    ),
+                    message_id=msg_id
+                )
+            elif ptype == "reaction_role":
+                bot.add_view(
+                    ReactionRoleView(
+                        panel["role_id"]
+                    ),
+                    message_id=msg_id
+                )
+        except Exception as e:
+            print(f"❌ Failed to load persistent view: {e}")
 
     try:
         synced = await bot.tree.sync()
