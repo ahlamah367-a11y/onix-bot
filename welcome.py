@@ -399,7 +399,7 @@ async def set_mod_role(interaction: discord.Interaction, role: discord.Role):
 
 
 # ==================================
-# إنشاء أنواع التذاكر والأوامر الإدارية (مع حماية المشرفين)
+# إنشاء أنواع التذاكر والأوامر الإدارية
 # ==================================
 
 @bot.tree.command(
@@ -1490,7 +1490,7 @@ async def send_rating_log(interaction, stars, ticket):
 
 
 # ==================================
-# أوامر الإدارة داخل التذكرة
+# أوامر الإدارة داخل التذكرة (تم تعديل الأسماء لتجنب التكرار)
 # ==================================
 
 @bot.tree.command(name="claim", description="استلام التذكرة")
@@ -1620,8 +1620,8 @@ async def ticket_remove(interaction: discord.Interaction, member: discord.Member
 
 
 
-@bot.tree.command(name="lock", description="قفل الكتابة في التذكرة")
-async def lock_ticket(interaction: discord.Interaction):
+@bot.tree.command(name="ticket-lock", description="قفل الكتابة في التذكرة")
+async def ticket_lock(interaction: discord.Interaction):
     if not check_staff(interaction):
         await interaction.response.send_message("❌ لا تملك صلاحية", ephemeral=True)
         return
@@ -1631,8 +1631,8 @@ async def lock_ticket(interaction: discord.Interaction):
 
 
 
-@bot.tree.command(name="unlock", description="فتح الكتابة في التذكرة")
-async def unlock_ticket(interaction: discord.Interaction):
+@bot.tree.command(name="ticket-unlock", description="فتح الكتابة في التذكرة")
+async def ticket_unlock(interaction: discord.Interaction):
     if not check_staff(interaction):
         await interaction.response.send_message("❌ لا تملك صلاحية", ephemeral=True)
         return
@@ -2448,7 +2448,7 @@ async def unban(interaction: discord.Interaction, user_id: str):
 
 
 # ==================================
-# أوامر الإدارة والرومات (Clear, Lock, Unlock, Slowmode)
+# أوامر الإدارة والرومات العامة (Clear, Lock, Unlock, Slowmode)
 # ==================================
 
 @bot.tree.command(name="clear", description="مسح عدد من الرسائل")
