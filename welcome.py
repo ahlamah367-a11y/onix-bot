@@ -578,8 +578,13 @@ class ApplicationControlView(discord.ui.View):
         )
 
 # ================================
-# قائمة أنواع التقديم (Select Menu)
+# قائمة أنواع التقديم (Select Menu) مع إمكانية تخصيص الزر
 # ================================
+
+class ApplicationButtonView(discord.ui.View):
+    def __init__(self, guild_id, button_name: str = None, button_emoji: str = None):
+        super().__init__(timeout=None)
+        self.add_item(ApplicationMenu(guild_id))
 
 class ApplicationMenu(discord.ui.Select):
     def __init__(self, guild_id):
@@ -669,6 +674,92 @@ async def application_panel(
         "✅ تم إنشاء بانل التقديم بنجاح.",
         ephemeral=True
     )
+
+@bot.tree.command(name="application-update-panel", description="تحديث بانل التقديم الحالي")
+@app_commands.checks.has_permissions(administrator=True)
+async def application_update_panel(
+    interaction: discord.Interaction,
+    title: str,
+    description: str,
+    button_name: str,
+    button_emoji: str,
+    image: str = None
+):
+    gid = str(interaction.guild.id)
+
+    if gid not in application_config:
+        await interaction.response.send_message(
+            "❌ لا يوجد بانل تقديم معد مسبقاً.",
+            ephemeral=True
+        )
+        return
+
+    config = application_config[gid]
+
+    channel_id = config.get("panel_channel") or config.get("channel")
+    old_message_id = None
+
+    for panel in persistent_panels:
+        if panel.get("type") == "application" and str(panel.get("guild_id")) == gid:
+            old_message_id = panel.get("message_id")
+            break
+
+    if not old_message_id:
+        await interaction.response.send_message(
+            "❌ لم يتم العثور على رسالة البانل.",
+            ephemeral=True
+        )
+        return
+
+    channel = interaction.guild.get_channel(channel_id)
+
+    if not channel:
+        await interaction.response.send_message(
+            "❌ روم البانل غير موجود.",
+            ephemeral=True
+        )
+        return
+
+    try:
+        msg = await channel.fetch_message(old_message_id)
+
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=discord.Color.blurple()
+        )
+
+        if image:
+            embed.set_image(url=image)
+
+        await msg.edit(
+            embed=embed,
+            view=ApplicationButtonView(
+                interaction.guild.id,
+                button_name,
+                button_emoji
+            )
+        )
+
+        # حفظ التحديثات
+        application_config[gid]["title"] = title
+        application_config[gid]["description"] = description
+        application_config[gid]["button_name"] = button_name
+        application_config[gid]["button_emoji"] = button_emoji
+        application_config[gid]["image"] = image
+
+        save_all_applications()
+
+        await interaction.response.send_message(
+            "✅ تم تحديث بانل التقديم بنجاح.",
+            ephemeral=True
+        )
+
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ حدث خطأ: {e}",
+            ephemeral=True
+        )
 
 @bot.tree.command(name="application-add-type", description="إضافة نوع تقديم جديد")
 @app_commands.checks.has_permissions(administrator=True)
@@ -1181,7 +1272,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🛡️ الإدارة", value="/ban, /kick, /mute, /warn, /clear, /lock, /unlock, /say, /embed", inline=False)
     embed.add_field(name="👑 إدارة الرتب والأعضاء", value="/addrole, /removerole, /createrole, /roleall, /nickname, /dm, /announce", inline=False)
     embed.add_field(name="📊 المعلومات", value="/avatar, /userinfo, /serverinfo, /ping", inline=False)
-    embed.add_field(name="📝 التقديمات والترحيب", value="/application-panel, /application-add-type, /application-remove-type, /application-set-questions, /set-welcome, /member-count-setup", inline=False)
+    embed.add_field(name="📝 التقديمات والترحيب", value="/application-panel, /application-update-panel, /application-add-type, /application-remove-type, /application-set-questions, /set-welcome, /member-count-setup", inline=False)
     embed.add_field(name="🛡️ الحماية", value="/anti-links, /anti-invite, /badword-add", inline=False)
     await interaction.response.send_message(embed=embed)
 
