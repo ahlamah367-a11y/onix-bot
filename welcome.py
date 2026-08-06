@@ -382,7 +382,6 @@ async def on_message(message):
     user_message_timestamps[user_id] = [t for t in user_message_timestamps[user_id] if now - t < 5]
     user_message_timestamps[user_id].append(now)
 
-    # تم رفع الحد إلى 8 رسائل خلال 5 ثواني لمنع التايم أوت العشوائي
     if len(user_message_timestamps[user_id]) >= 8:
         try:
             await message.author.timeout(timedelta(minutes=2), reason="Anti-Spam")
@@ -442,13 +441,27 @@ class ApplicationDecisionView(discord.ui.View):
         super().__init__(timeout=None)
         self.user_id = user_id
         self.app_id = app_id
+        
+        self.add_item(discord.ui.Button(
+            label="قبول",
+            emoji="✅",
+            style=discord.ButtonStyle.green,
+            custom_id=f"app_accept_{app_id}",
+            callback=self.accept_callback
+        ))
+        
+        self.add_item(discord.ui.Button(
+            label="رفض",
+            emoji="❌",
+            style=discord.ButtonStyle.red,
+            custom_id=f"app_reject_{app_id}",
+            callback=self.reject_callback
+        ))
 
-    @discord.ui.button(label="قبول", emoji="✅", style=discord.ButtonStyle.green, custom_id=f"app_accept_{app_id}")
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def accept_callback(self, interaction: discord.Interaction):
         await self.process(interaction, True)
 
-    @discord.ui.button(label="رفض", emoji="❌", style=discord.ButtonStyle.red, custom_id=f"app_reject_{app_id}")
-    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def reject_callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(RejectReasonModal(self.user_id, self.app_id))
 
     async def process(self, interaction, accepted, reason="بدون سبب"):
@@ -542,7 +555,6 @@ class DynamicApplicationModal(discord.ui.Modal):
             applications_data[gid] = []
 
         answers = [item.value for item in self.children]
-        # استخدام معرف عشوائي لمنع تكرار الأرقام عند حذف تقديمات سابقة
         app_id = random.randint(100000, 999999)
 
         applications_data[gid].append({
