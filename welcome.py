@@ -551,30 +551,95 @@ class ApplicationButtonView(discord.ui.View):
     def __init__(self, guild_id, button_text, button_emoji):
         super().__init__(timeout=None)
         self.guild_id = guild_id
-        
-        btn = discord.ui.Button(label=button_text, emoji=button_emoji, style=discord.ButtonStyle.green, custom_id=f"open_app_{guild_id}")
+
+        btn = discord.ui.Button(
+            label=button_text,
+            emoji=button_emoji,
+            style=discord.ButtonStyle.green,
+            custom_id=f"open_app_{guild_id}"
+        )
+
         btn.callback = self.button_callback
         self.add_item(btn)
 
     async def button_callback(self, interaction: discord.Interaction):
         if has_pending_application(interaction.guild.id, interaction.user.id):
-            await interaction.response.send_message("❌ لديك تقديم قيد المراجعة بالفعل", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ لديك تقديم قيد المراجعة بالفعل",
+                ephemeral=True
+            )
             return
-        await interaction.response.send_modal(DynamicApplicationModal(self.guild_id, "عام"))
 
-@bot.tree.command(name="application-setup", description="إنشاء بانل التقديم")
+        await interaction.response.send_modal(
+            DynamicApplicationModal(
+                self.guild_id,
+                "عام"
+            )
+        )
+
+@bot.tree.command(name="application-setup", description="إنشاء بانل تقديم مخصص")
 @app_commands.checks.has_permissions(administrator=True)
-async def application_setup(interaction: discord.Interaction, panel_channel: discord.TextChannel, results_channel: discord.TextChannel, description: str):
+async def application_setup(
+    interaction: discord.Interaction,
+    panel_channel: discord.TextChannel,
+    results_channel: discord.TextChannel,
+    title: str,
+    description: str,
+    button_name: str,
+    button_emoji: str,
+    image: str = None
+):
+
     guild_id = str(interaction.guild.id)
-    application_config[guild_id] = {"panel_channel": panel_channel.id, "results": results_channel.id}
+
+    application_config[guild_id] = {
+        "panel_channel": panel_channel.id,
+        "results": results_channel.id,
+        "title": title,
+        "description": description,
+        "button_name": button_name,
+        "button_emoji": button_emoji,
+        "image": image
+    }
+
     save_application_config()
 
-    embed = discord.Embed(title="📋 التقديمات", description=description, color=discord.Color.blurple())
-    msg = await panel_channel.send(embed=embed, view=ApplicationButtonView(interaction.guild.id, "تقديم", "📝"))
-    
-    persistent_panels.append({"type": "application", "guild_id": interaction.guild.id, "channel_id": panel_channel.id, "message_id": msg.id})
+
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blurple()
+    )
+
+
+    if image:
+        embed.set_image(url=image)
+
+
+    msg = await panel_channel.send(
+        embed=embed,
+        view=ApplicationButtonView(
+            interaction.guild.id,
+            button_name,
+            button_emoji
+        )
+    )
+
+
+    persistent_panels.append({
+        "type": "application",
+        "guild_id": interaction.guild.id,
+        "channel_id": panel_channel.id,
+        "message_id": msg.id
+    })
+
     save_persistent()
-    await interaction.response.send_message("✅ تم إنشاء بانل التقديم بنجاح", ephemeral=True)
+
+
+    await interaction.response.send_message(
+        "✅ تم إنشاء بانل التقديم بالتخصيص بنجاح",
+        ephemeral=True
+    )
 
 @bot.tree.command(name="application-add-type", description="إضافة نوع تقديم جديد")
 @app_commands.checks.has_permissions(administrator=True)
@@ -1158,7 +1223,10 @@ async def on_ready():
         try:
             ptype = panel.get("type")
             if ptype == "application":
-                bot.add_view(ApplicationButtonView(panel["guild_id"], "تقديم", "📝"), message_id=panel["message_id"])
+                cfg_data = application_config.get(str(panel["guild_id"]), {})
+                b_name = cfg_data.get("button_name", "تقديم")
+                b_emoji = cfg_data.get("button_emoji", "📝")
+                bot.add_view(ApplicationButtonView(panel["guild_id"], b_name, b_emoji), message_id=panel["message_id"])
             elif ptype == "reaction_role":
                 bot.add_view(ReactionRoleView(panel["role_id"]), message_id=panel["message_id"])
         except Exception as e:
