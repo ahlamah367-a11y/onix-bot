@@ -1067,6 +1067,61 @@ class ReactionRoleView(discord.ui.View):
             embed=embed,
             ephemeral=True
         )
+                embed = discord.Embed(
+            title=f"👥 أعضاء رتبة {role.name}",
+            description=text,
+            color=discord.Color.blue()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+# ==================================
+# ضع كود أمر السلاش هنا تماماً 👇
+# ==================================
+
+@bot.tree.command(name="reaction-role", description="إنشاء بانل أخذ/إزالة رتبة عبر الأزرار")
+@app_commands.describe(
+    channel="الروم المراد إرسال البانل إليه",
+    role="الرتبة المراد إعطاؤها للعضو",
+    title="عنوان الرسالة (Embed)",
+    description="وصف الرسالة (Embed)"
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def reaction_role(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    role: discord.Role,
+    title: str,
+    description: str
+):
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blurple()
+    )
+    
+    view = ReactionRoleView(role.id)
+    msg = await channel.send(embed=embed, view=view)
+    
+    global persistent_panels
+    persistent_panels.append({
+        "type": "reaction_role",
+        "guild_id": interaction.guild.id,
+        "channel_id": channel.id,
+        "message_id": msg.id,
+        "role_id": role.id
+    })
+    save_persistent()
+    
+    await interaction.response.send_message(
+        f"✅ تم إنشاء بانل الرتبة بنجاح في {channel.mention} لرتبة {role.mention}",
+        ephemeral=True
+    )
+
+
 # ==================================
 # أوامر الإدارة والعقوبات (Moderation)
 # ==================================
