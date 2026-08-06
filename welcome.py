@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import asyncio
 import random
 import time
+import re
 
 # ==================================
 # إعداد البوت
@@ -17,121 +18,119 @@ intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
 intents.message_content = True
+intents.guild_messages = True
+intents.reactions = True
 
 bot = commands.Bot(
     command_prefix="!",
     intents=intents
 )
 
-GUILD_ID = 1532326696714240062
-
 # ==================================
-# إعدادات ونظام الترحيب (Welcome System)
+# الملفات وقواعد البيانات
 # ==================================
 
 WELCOME_CONFIG_FILE = "welcome_config.json"
+LOGS_CONFIG_FILE = "logs_config.json"
+MOD_CONFIG_FILE = "mod_roles.json"
+GIVEAWAYS_FILE = "giveaways_database.json"
+ENDED_GIVEAWAYS_FILE = "ended_giveaways_database.json"
+WARNINGS_FILE = "warnings.json"
+CONFIG_FILE = "config.json"
+CUSTOM_COMMANDS_FILE = "custom_commands.json"
+SETTINGS_FILE = "settings.json"
+ERROR_LOG_FILE = "error_logs.json"
+ALLOWED_CHANNELS_FILE = "allowed_channels.json"
+PROTECTION_FILE = "protection_config.json"
+SUGGESTIONS_FILE = "suggestions.json"
+XP_FILE = "xp.json"
+AFK_FILE = "afk.json"
+REACTION_ROLES_FILE = "reaction_roles.json"
+BACKUP_FILE = "server_backup_info.json"
+ANTI_CONFIG_FILE = "anti_config.json"
+BAD_WORDS_FILE = "bad_words.json"
 
-def load_welcome_config():
-    if os.path.exists(WELCOME_CONFIG_FILE):
-        with open(WELCOME_CONFIG_FILE, "r", encoding="utf-8") as f:
+# ملفات نظام التقديمات
+APPLICATIONS_FILE = "applications_data.json"
+APPLICATION_CONFIG_FILE = "applications_config.json"
+APPLICATION_TYPES_FILE = "application_types.json"
+APPLICATION_QUESTIONS_FILE = "application_questions.json"
+APPLICATION_DECISIONS_FILE = "application_decisions.json"
+APPLICATION_COOLDOWN_FILE = "application_cooldowns.json"
+
+# ==================================
+# دوال التحميل والحفظ العامة
+# ==================================
+
+def load_json(filename, default=None):
+    if default is None:
+        default = {}
+    if os.path.exists(filename):
+        with open(filename, "r", encoding="utf-8") as f:
             try:
                 return json.load(f)
             except:
-                return {}
-    return {}
+                return default
+    return default
 
-def save_welcome_config():
-    with open(WELCOME_CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(welcome_config, f, indent=4, ensure_ascii=False)
+def save_json(filename, data):
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
 
-welcome_config = load_welcome_config()
+def save_error(error):
+    logs = load_json(ERROR_LOG_FILE, [])
+    logs.append({
+        "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "error": str(error)
+    })
+    save_json(ERROR_LOG_FILE, logs)
 
+welcome_config = load_json(WELCOME_CONFIG_FILE)
+mod_roles = load_json(MOD_CONFIG_FILE)
+custom_commands = load_json(CUSTOM_COMMANDS_FILE)
+protection_config = load_json(PROTECTION_FILE)
+suggestions = load_json(SUGGESTIONS_FILE)
+xp_data = load_json(XP_FILE)
+afk_users = load_json(AFK_FILE)
+reaction_roles = load_json(REACTION_ROLES_FILE)
+allowed_channels = load_json(ALLOWED_CHANNELS_FILE)
+ended_giveaways = load_json(ENDED_GIVEAWAYS_FILE)
+anti_config = load_json(ANTI_CONFIG_FILE)
+bad_words = load_json(BAD_WORDS_FILE, [])
+giveaways = {}
 
-@bot.tree.command(name="set-welcome", description="تحديد روم وإعداد رسالة الترحيب")
-@app_commands.describe(channel="روم الترحيب", message="رسالة الترحيب (استخدم {user} لعمل إشارة للأعضاء)")
-async def set_welcome(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ هذا الأمر للمشرفين فقط", ephemeral=True)
-        return
+# تحميل بيانات نظام التقديمات
+applications_data = load_json(APPLICATIONS_FILE, {})
+application_config = load_json(APPLICATION_CONFIG_FILE, {})
+application_types = load_json(APPLICATION_TYPES_FILE, {})
+application_questions = load_json(APPLICATION_QUESTIONS_FILE, {})
+application_decisions = load_json(APPLICATION_DECISIONS_FILE, {})
+application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
 
-    welcome_config[str(interaction.guild.id)] = {
-        "channel_id": channel.id,
-        "message": message
-    }
-    save_welcome_config()
+def save_applications():
+    save_json(APPLICATIONS_FILE, applications_data)
 
-    await interaction.response.send_message(
-        f"✅ تم ضبط نظام الترحيب بنجاح في الروم {channel.mention}!",
-        ephemeral=True
-    )
+def save_application_config():
+    save_json(APPLICATION_CONFIG_FILE, application_config)
 
+def save_application_types():
+    save_json(APPLICATION_TYPES_FILE, application_types)
 
-@bot.event
-async def on_member_join(member):
-    guild_id = str(member.guild.id)
-    
-    # 1. نظام الترحيب
-    if guild_id in welcome_config:
-        data = welcome_config[guild_id]
-        channel_id = data.get("channel_id")
-        raw_message = data.get("message", "أهلاً بك {user} في السيرفر!")
-        channel = member.guild.get_channel(channel_id)
-        if channel:
-            formatted_message = raw_message.replace("{user}", member.mention)
-            embed = discord.Embed(
-                title="👋 عضو جديد!",
-                description=formatted_message,
-                color=discord.Color.green(),
-                timestamp=datetime.utcnow()
-            )
-            if member.avatar:
-                embed.set_thumbnail(url=member.avatar.url)
-            else:
-                embed.set_thumbnail(url=member.default_avatar.url)
-            embed.set_footer(text=member.guild.name, icon_url=member.guild.icon.url if member.guild.icon else None)
-            try:
-                await channel.send(content=member.mention, embed=embed)
-            except:
-                pass
+def save_application_questions():
+    save_json(APPLICATION_QUESTIONS_FILE, application_questions)
 
-    # 2. نظام الرول التلقائي (Autorole)
-    if os.path.exists("config.json"):
-        with open("config.json", "r", encoding="utf-8") as f:
-            try:
-                cfg = json.load(f)
-                role_id = cfg.get(str(member.guild.id), {}).get("autorole_id")
-                if role_id:
-                    role = member.guild.get_role(role_id)
-                    if role:
-                        await member.add_roles(role)
-            except:
-                pass
+def save_application_decisions():
+    save_json(APPLICATION_DECISIONS_FILE, application_decisions)
 
-    # 3. سجلات دخول عضو
-    await send_log(member.guild, "📥 دخول عضو", f"العضو: {member.mention} (`{member.id}`)", discord.Color.green())
-
+def save_application_cooldowns():
+    save_json(APPLICATION_COOLDOWN_FILE, application_cooldowns)
 
 # ==================================
 # نظام السجلات (Logs System)
 # ==================================
 
-LOGS_CONFIG_FILE = "logs_config.json"
-
-def load_logs_config():
-    if os.path.exists(LOGS_CONFIG_FILE):
-        with open(LOGS_CONFIG_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return {}
-    return {}
-
-def save_logs_config(data):
-    with open(LOGS_CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
 async def send_log(guild, title, description, color):
-    config = load_logs_config()
+    config = load_json(LOGS_CONFIG_FILE)
     log_channel_id = config.get(str(guild.id))
     if log_channel_id:
         channel = guild.get_channel(log_channel_id)
@@ -142,767 +141,161 @@ async def send_log(guild, title, description, color):
             except:
                 pass
 
-
 @bot.tree.command(name="set-logs", description="تحديد روم السجلات (Logs)")
 @app_commands.describe(channel="روم السجلات")
 @app_commands.checks.has_permissions(administrator=True)
 async def set_logs(interaction: discord.Interaction, channel: discord.TextChannel):
-    config = load_logs_config()
+    config = load_json(LOGS_CONFIG_FILE)
     config[str(interaction.guild.id)] = channel.id
-    save_logs_config(config)
+    save_json(LOGS_CONFIG_FILE, config)
     await interaction.response.send_message(f"✅ تم ضبط روم السجلات بنجاح في {channel.mention}", ephemeral=True)
 
+# ==================================
+# التحقق من صلاحيات الإدارة
+# ==================================
+
+def has_mod_permission(member):
+    if member.guild_permissions.administrator:
+        return True
+    role_id = mod_roles.get(str(member.guild.id))
+    if role_id:
+        role = member.guild.get_role(role_id)
+        if role and role in member.roles:
+            return True
+    return False
+
+# ==================================
+# الأحداث الأساسية (On Member Join / Remove)
+# ==================================
+
+raid_tracker = {}
+
+@bot.event
+async def on_member_join(member):
+    guild = member.guild
+    guild_id = str(guild.id)
+    
+    if guild_id in welcome_config:
+        data = welcome_config[guild_id]
+        channel_id = data.get("channel_id")
+        raw_message = data.get("message", "أهلاً بك {user} في السيرفر!")
+        channel = guild.get_channel(channel_id)
+        if channel:
+            formatted_message = raw_message.replace("{user}", member.mention)
+            embed = discord.Embed(
+                title="👋 عضو جديد!",
+                description=formatted_message,
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+            embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            try:
+                await channel.send(content=member.mention, embed=embed)
+            except:
+                pass
+
+    cfg = load_json(CONFIG_FILE)
+    role_id = cfg.get(guild_id, {}).get("autorole_id")
+    if role_id:
+        role = guild.get_role(role_id)
+        if role:
+            try:
+                await member.add_roles(role)
+            except:
+                pass
+
+    prot = protection_config.get(guild_id, {})
+    if prot.get("anti_raid"):
+        now = time.time()
+        if guild.id not in raid_tracker:
+            raid_tracker[guild.id] = []
+        raid_tracker[guild.id].append(now)
+        raid_tracker[guild.id] = [x for x in raid_tracker[guild.id] if now - x <= prot.get("raid_time", 10)]
+        
+        if len(raid_tracker[guild.id]) >= prot.get("raid_limit", 5):
+            try:
+                await guild.edit(verification_level=discord.VerificationLevel.high)
+            except:
+                pass
+            
+            try:
+                await member.kick(reason="Anti-Raid: Mass Joining Detected")
+            except:
+                pass
+
+            await send_log(
+                guild, 
+                "🚨 Raid Detected & Punished", 
+                f"تم اكتشاف هجوم دخول أعضاء وتم اتخاذ إجراءات أمان تلقائية!\nالعدد: `{len(raid_tracker[guild.id])}`\nالإجراء: رفع مستوى التحقق وطرد الحسابات المخالفة.", 
+                discord.Color.red()
+            )
+
+    await send_log(guild, "📥 دخول عضو", f"العضو: {member.mention} (`{member.id}`)", discord.Color.green())
 
 @bot.event
 async def on_member_remove(member):
     await send_log(member.guild, "📤 خروج عضو", f"العضو: {member.mention} (`{member.id}`)", discord.Color.dark_red())
 
-
 # ==================================
-# إعدادات رتبة الإدارة السريعة
+# فحص الحماية المتقدم (Anti Check)
 # ==================================
 
-MOD_CONFIG_FILE = "mod_roles.json"
+async def anti_check(message):
+    if not message.guild or message.author.bot:
+        return
 
-def load_mod_roles():
-    if os.path.exists(MOD_CONFIG_FILE):
-        with open(MOD_CONFIG_FILE, "r", encoding="utf-8") as f:
+    config = anti_config.get(str(message.guild.id), {})
+
+    if config.get("massmention"):
+        if message.mention_everyone:
             try:
-                return json.load(f)
-            except:
-                return {}
-    return {}
-
-def save_mod_roles(data):
-    with open(MOD_CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-mod_roles = load_mod_roles()
-
-def has_mod_permission(member):
-    if member.guild_permissions.administrator:
-        return True
-
-    role_id = mod_roles.get(str(member.guild.id))
-
-    if role_id:
-        role = member.guild.get_role(role_id)
-        if role and role in member.roles:
-            return True
-
-    return False
-
-
-@bot.tree.command(name="set-mod-role", description="تحديد رتبة الإدارة للأوامر السريعة")
-@app_commands.describe(role="الرتبة التي تستطيع استعمال أوامر الإدارة")
-@app_commands.checks.has_permissions(administrator=True)
-async def set_mod_role(interaction: discord.Interaction, role: discord.Role):
-    mod_roles[str(interaction.guild.id)] = role.id
-    save_mod_roles(mod_roles)
-
-    await interaction.response.send_message(
-        f"✅ تم تحديد رتبة الإدارة: {role.mention}",
-        ephemeral=True
-    )
-
-
-# ==================================
-# قاعدة البيانات الخاصة بالقيف أوي
-# ==================================
-
-GIVEAWAYS_FILE = "giveaways_database.json"
-ENDED_GIVEAWAYS_FILE = "ended_giveaways_database.json"
-
-giveaways = {}
-ended_giveaways = {}
-
-def load_giveaways():
-    if os.path.exists(GIVEAWAYS_FILE):
-        with open(GIVEAWAYS_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return {}
-    return {}
-
-def load_ended_giveaways():
-    if os.path.exists(ENDED_GIVEAWAYS_FILE):
-        with open(ENDED_GIVEAWAYS_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return {}
-    return {}
-
-def save_giveaways_data():
-    data_to_save = {}
-    for gid, gdata in giveaways.items():
-        data_to_save[str(gid)] = {
-            "id": gdata["id"],
-            "prize": gdata["prize"],
-            "winners_count": gdata["winners_count"],
-            "image_url": gdata["image_url"],
-            "participants": gdata["participants"],
-            "channel_id": gdata["message"].channel.id,
-            "message_id": gdata["message"].id,
-            "end_time": gdata["end_time"].isoformat(),
-            "creator": str(gdata.get("creator", "Unknown"))
-        }
-    with open(GIVEAWAYS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data_to_save, f, indent=4, ensure_ascii=False)
-
-def save_ended_giveaways_data():
-    data_to_save = {}
-    for gid, gdata in ended_giveaways.items():
-        data_to_save[str(gid)] = {
-            "id": gdata["id"],
-            "prize": gdata["prize"],
-            "winners_count": gdata["winners_count"],
-            "image_url": gdata["image_url"],
-            "participants": gdata["participants"],
-            "channel_id": gdata["channel_id"],
-            "message_id": gdata["message_id"],
-            "end_time": gdata["end_time"],
-            "winners": gdata.get("winners", "لا يوجد"),
-            "creator": str(gdata.get("creator", "Unknown"))
-        }
-    with open(ENDED_GIVEAWAYS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data_to_save, f, indent=4, ensure_ascii=False)
-
-ended_giveaways = load_ended_giveaways()
-
-
-# ==================================
-# نظام القيف أوي المطور
-# ==================================
-
-class GiveawayView(discord.ui.View):
-    def __init__(self, giveaway_id):
-        super().__init__(timeout=None)
-        self.giveaway_id = giveaway_id
-
-    @discord.ui.button(label="🎉 مشاركة", style=discord.ButtonStyle.success, custom_id="giveaway_join_secure")
-    async def join(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.bot:
-            await interaction.response.send_message("❌ لا يُسمح للبوتات بالمشاركة!", ephemeral=True)
-            return
-
-        data = giveaways.get(self.giveaway_id)
-        if not data:
-            await interaction.response.send_message("❌ انتهى القيف أوي.", ephemeral=True)
-            return
-
-        user_id = interaction.user.id
-        if user_id in data["participants"]:
-            data["participants"].remove(user_id)
-            await interaction.response.send_message("❌ تم إلغاء مشاركتك.", ephemeral=True)
-        else:
-            data["participants"].append(user_id)
-            await interaction.response.send_message("✅ تم تسجيل مشاركتك!", ephemeral=True)
-
-        save_giveaways_data()
-        await update_giveaway_message(data)
-
-
-async def update_giveaway_message(data):
-    remaining = data["end_time"] - datetime.utcnow()
-    if remaining.total_seconds() < 0:
-        return
-
-    seconds = int(remaining.total_seconds())
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    secs = seconds % 60
-    time_str = f"{hours:02d}:{minutes:02d}:{secs:02d}"
-
-    embed = discord.Embed(
-        title="🎉 قيف أوي جديد | GIVEAWAY",
-        description=f"> 🎁 **الجائزة:** `{data['prize']}`\n> 🏆 **عدد الفائزين:** `{data['winners_count']}`\n> 👥 **المشاركون:** `{len(data['participants'])}`\n> ⏳ **متبقي:** `{time_str}`",
-        color=discord.Color.gold()
-    )
-    if data["image_url"]:
-        embed.set_image(url=data["image_url"])
-
-    try:
-        await data["message"].edit(embed=embed, view=GiveawayView(data["id"]))
-    except:
-        pass
-
-
-async def giveaway_timer(data):
-    while datetime.utcnow() < data["end_time"]:
-        await update_giveaway_message(data)
-        await asyncio.sleep(5)
-
-    await end_giveaway(data["id"])
-
-
-async def end_giveaway(giveaway_id, is_reroll=False):
-    data = giveaways.get(giveaway_id)
-    if not data:
-        return
-
-    participants = data["participants"]
-    winners_count = data["winners_count"]
-
-    if len(participants) == 0:
-        winners_text = "لا يوجد مشاركين"
-    else:
-        actual_winners_count = min(winners_count, len(participants))
-        chosen_winners = random.sample(participants, actual_winners_count)
-        medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
-        winners_list = []
-        for index, winner_id in enumerate(chosen_winners):
-            medal = medals[index] if index < len(medals) else "🏅"
-            winners_list.append(f"{medal} <@{winner_id}>")
-        winners_text = "\n".join(winners_list)
-
-    embed = discord.Embed(
-        title="🎉 انتهى القيف أوي" if not is_reroll else "🔄 إعادة اختيار الفائزين",
-        description=f"> 🎁 الجائزة: `{data['prize']}`\n> 🏆 الفائزين:\n{winners_text}\n> 👥 عدد المشاركين: `{len(participants)}`",
-        color=discord.Color.red()
-    )
-    if data["image_url"]:
-        embed.set_image(url=data["image_url"])
-
-    try:
-        await data["message"].edit(embed=embed, view=None)
-    except:
-        pass
-
-    ended_giveaways[str(giveaway_id)] = {
-        "id": data["id"],
-        "prize": data["prize"],
-        "winners_count": data["winners_count"],
-        "image_url": data["image_url"],
-        "participants": data["participants"],
-        "channel_id": data["message"].channel.id,
-        "message_id": data["message"].id,
-        "end_time": data["end_time"].isoformat(),
-        "winners": winners_text,
-        "creator": str(data.get("creator", "Unknown"))
-    }
-    save_ended_giveaways_data()
-
-    if giveaway_id in giveaways:
-        del giveaways[giveaway_id]
-        save_giveaways_data()
-
-
-@bot.tree.command(name="giveaway", description="إنشاء قيف أوي مطور")
-@app_commands.describe(prize="الجائزة", duration_minutes="المدة بالدقائق", winners_count="عدد الفائزين", channel="الروم", image_url="رابط صورة الجائزة (اختياري)")
-@app_commands.checks.has_permissions(administrator=True)
-async def giveaway(interaction: discord.Interaction, prize: str, duration_minutes: int, winners_count: int, channel: discord.TextChannel, image_url: str = None):
-    if duration_minutes < 1:
-        await interaction.response.send_message("❌ الوقت يجب أن يكون أكثر من دقيقة واحدة!", ephemeral=True)
-        return
-
-    giveaway_id = random.randint(100000, 999999)
-    embed = discord.Embed(
-        title="🎉 قيف أوي جديد",
-        description=f"> 🎁 الجائزة: `{prize}`\n> 🏆 عدد الفائزين: `{winners_count}`\n> 👥 المشاركون: `0`\n> ⏳ المدة: `{duration_minutes} دقيقة`",
-        color=discord.Color.gold()
-    )
-    if image_url:
-        embed.set_image(url=image_url)
-
-    msg = await channel.send(content="@everyone", embed=embed, view=GiveawayView(giveaway_id))
-    
-    data = {
-        "id": giveaway_id,
-        "prize": prize,
-        "winners_count": winners_count,
-        "image_url": image_url,
-        "participants": [],
-        "message": msg,
-        "end_time": datetime.utcnow() + timedelta(minutes=duration_minutes),
-        "creator": interaction.user.name
-    }
-
-    giveaways[giveaway_id] = data
-    save_giveaways_data()
-    bot.loop.create_task(giveaway_timer(data))
-
-    await interaction.response.send_message("✅ تم إنشاء القيف أوي بنجاح.", ephemeral=True)
-
-
-@bot.tree.command(name="giveaway-cancel", description="إلغاء قيف أوي نشط")
-@app_commands.describe(giveaway_id="معرف القيف أوي")
-@app_commands.checks.has_permissions(administrator=True)
-async def giveaway_cancel(interaction: discord.Interaction, giveaway_id: int):
-    data = giveaways.get(giveaway_id)
-    if not data:
-        await interaction.response.send_message("❌ لم يتم العثور على قيف أوي نشط بهذا المعرف.", ephemeral=True)
-        return
-
-    try:
-        embed = discord.Embed(title="❌ تم إلغاء القيف أوي", description=f"الجائزة: `{data['prize']}`", color=discord.Color.dark_grey())
-        await data["message"].edit(embed=embed, view=None)
-    except:
-        pass
-
-    if giveaway_id in giveaways:
-        del giveaways[giveaway_id]
-        save_giveaways_data()
-
-    await interaction.response.send_message("✅ تم إلغاء القيف أوي بنجاح.", ephemeral=True)
-
-
-@bot.tree.command(name="reroll", description="إعادة اختيار فائزين جدد للقيف أوي")
-@app_commands.describe(giveaway_id="معرف القيف أوي (رقم الـ ID)", winners_count="عدد الفائزين الجدد")
-@app_commands.checks.has_permissions(administrator=True)
-async def reroll(interaction: discord.Interaction, giveaway_id: int, winners_count: int = 1):
-    data = giveaways.get(giveaway_id)
-    if not data:
-        saved_ended = load_ended_giveaways()
-        if str(giveaway_id) in saved_ended:
-            data = saved_ended[str(giveaway_id)]
-            data["end_time"] = datetime.fromisoformat(data["end_time"])
-        else:
-            await interaction.response.send_message("❌ لم يتم العثور على القيف أوي بهذا المعرف.", ephemeral=True)
-            return
-
-    participants = data["participants"]
-    if not participants:
-        await interaction.response.send_message("❌ لا يوجد مشاركين في هذا القيف أوي لإعادة الاختيار.", ephemeral=True)
-        return
-
-    actual_winners_count = min(winners_count, len(participants))
-    chosen_winners = random.sample(participants, actual_winners_count)
-    medals = ["🥇", "🥈", "🥉", "🏅", "🏅"]
-    winners_list = []
-    for index, winner_id in enumerate(chosen_winners):
-        medal = medals[index] if index < len(medals) else "🏅"
-        winners_list.append(f"{medal} <@{winner_id}>")
-    winners_text = "\n".join(winners_list)
-
-    embed = discord.Embed(
-        title="🔄 إعادة اختيار الفائزين (Reroll)",
-        description=f"> 🎁 الجائزة: `{data['prize']}`\n> 🏆 الفائزين الجدد:\n{winners_text}",
-        color=discord.Color.purple()
-    )
-    if data.get("image_url"):
-        embed.set_image(url=data["image_url"])
-
-    channel_id = data["channel_id"] if isinstance(data["channel_id"], int) else data["message"].channel.id
-    channel = interaction.guild.get_channel(channel_id)
-    if channel:
-        await channel.send(embed=embed)
-
-    await interaction.response.send_message("✅ تم إعادة اختيار الفائزين بنجاح!", ephemeral=True)
-
-
-@bot.tree.command(name="giveaway-info", description="معلومات القيف أوي")
-@app_commands.describe(giveaway_id="معرف القيف أوي")
-async def giveaway_info(interaction: discord.Interaction, giveaway_id: int):
-    data = giveaways.get(giveaway_id)
-    if not data:
-        saved_ended = load_ended_giveaways()
-        if str(giveaway_id) in saved_ended:
-            data = saved_ended[str(giveaway_id)]
-            data["end_time"] = datetime.fromisoformat(data["end_time"])
-            time_text = "انتهى بالفعل"
-        else:
-            await interaction.response.send_message("❌ القيف أوي غير موجود.", ephemeral=True)
-            return
-    else:
-        remaining = data["end_time"] - datetime.utcnow()
-        if remaining.total_seconds() < 0:
-            time_text = "انتهى الوقت"
-        else:
-            seconds = int(remaining.total_seconds())
-            hours = seconds // 3600
-            minutes = (seconds % 3600) // 60
-            time_text = f"{hours} ساعة و {minutes} دقيقة"
-
-    embed = discord.Embed(
-        title=f"📋 Giveaway Logs & Info #{data['id']}",
-        description=f"> 👤 **المنشئ:** `{data.get('creator', 'غير معروف')}`\n> 🎁 **الجائزة:** `{data['prize']}`\n> 🏆 **عدد الفائزين المطلوبة:** `{data['winners_count']}`\n> 👥 **عدد المشاركين:** `{len(data['participants'])}`\n> ⏳ **الحالة/الوقت:** `{time_text}`",
-        color=discord.Color.blue()
-    )
-    if data.get("image_url"):
-        embed.set_image(url=data["image_url"])
-
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# ==================================
-# نظام العقوبات (Warnings, Timeout, Kick, Ban)
-# ==================================
-
-WARNINGS_FILE = "warnings.json"
-
-def load_warnings():
-    if os.path.exists(WARNINGS_FILE):
-        with open(WARNINGS_FILE, "r", encoding="utf-8") as f:
-            try:
-                return json.load(f)
-            except:
-                return {}
-    return {}
-
-def save_warnings(data):
-    with open(WARNINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-
-@bot.tree.command(name="warn", description="تحذير عضو")
-@app_commands.describe(member="العضو المراد تحذيره", reason="السبب")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def warn(interaction: discord.Interaction, member: discord.Member, reason: str):
-    warnings = load_warnings()
-    guild_id = str(interaction.guild.id)
-    user_id = str(member.id)
-
-    if guild_id not in warnings:
-        warnings[guild_id] = {}
-    if user_id not in warnings[guild_id]:
-        warnings[guild_id][user_id] = []
-
-    warn_data = {
-        "reason": reason,
-        "moderator": interaction.user.name,
-        "date": datetime.utcnow().strftime("%Y/%m/%d %H:%M")
-    }
-    warnings[guild_id][user_id].append(warn_data)
-    save_warnings(warnings)
-
-    await interaction.response.send_message(f"✅ تم تحذير العضو {member.mention} بنجاح.", ephemeral=True)
-    await send_log(interaction.guild, "⚠️ تحذير عضو", f"العضو: {member.mention}\nالسبب: `{reason}`\nالمشرف: {interaction.user.mention}", discord.Color.orange())
-
-
-@bot.tree.command(name="warnings", description="عرض تحذيرات عضو")
-@app_commands.describe(member="العضو")
-async def warnings_cmd(interaction: discord.Interaction, member: discord.Member):
-    warnings = load_warnings()
-    guild_id = str(interaction.guild.id)
-    user_id = str(member.id)
-
-    user_warnings = warnings.get(guild_id, {}).get(user_id, [])
-    if not user_warnings:
-        await interaction.response.send_message(f"✅ العضو {member.mention} ليس لديه أي تحذيرات.", ephemeral=True)
-        return
-
-    desc = f"📋 **سجل التحذيرات لـ {member.mention}**\n\n"
-    for idx, w in enumerate(user_warnings, 1):
-        desc += f"**{idx}-** `{w['reason']}`\n> المشرف: `{w['moderator']}` | التاريخ: `{w['date']}`\n\n"
-
-    embed = discord.Embed(title="سجل التحذيرات", description=desc, color=discord.Color.yellow())
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-@bot.tree.command(name="clear-warnings", description="مسح تحذيرات عضو")
-@app_commands.describe(member="العضو")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def clear_warnings(interaction: discord.Interaction, member: discord.Member):
-    warnings = load_warnings()
-    guild_id = str(interaction.guild.id)
-    user_id = str(member.id)
-
-    if guild_id in warnings and user_id in warnings[guild_id]:
-        del warnings[guild_id][user_id]
-        save_warnings(warnings)
-
-    await interaction.response.send_message(f"✅ تم مسح تحذيرات العضو {member.mention}.", ephemeral=True)
-
-
-@bot.tree.command(name="timeout", description="إعطاء تايم أوت لعضو")
-@app_commands.describe(member="العضو", duration="المدة (بالدقائق)", reason="السبب")
-@app_commands.checks.has_permissions(moderate_members=True)
-async def timeout(interaction: discord.Interaction, member: discord.Member, duration: int, reason: str = "لا يوجد سبب"):
-    delta = timedelta(minutes=duration)
-    try:
-        await member.timeout(delta, reason=reason)
-        await interaction.response.send_message(f"✅ تم إسكات العضو {member.mention} لمدة {duration} دقائق.", ephemeral=True)
-        await send_log(interaction.guild, "⏳ تايم أوت", f"العضو: {member.mention}\nالمدة: `{duration} دقيقة`\nالسبب: `{reason}`", discord.Color.gold())
-    except Exception as e:
-        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
-
-
-@bot.tree.command(name="untimeout", description="إزالة التايم أوت عن عضو")
-@app_commands.describe(member="العضو")
-@app_commands.checks.has_permissions(moderate_members=True)
-async def untimeout(interaction: discord.Interaction, member: discord.Member):
-    try:
-        await member.timeout(None)
-        await interaction.response.send_message(f"✅ تم إزالة التايم عن {member.mention}.", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
-
-
-@bot.tree.command(name="kick", description="طرد عضو من السيرفر")
-@app_commands.describe(member="العضو", reason="السبب")
-@app_commands.checks.has_permissions(kick_members=True)
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لا يوجد سبب"):
-    try:
-        await member.kick(reason=reason)
-        await interaction.response.send_message(f"✅ تم طرد العضو {member.mention}.", ephemeral=True)
-        await send_log(interaction.guild, "👢 طرد عضو", f"العضو: {member.mention}\nالسبب: `{reason}`", discord.Color.red())
-    except Exception as e:
-        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
-
-
-@bot.tree.command(name="ban", description="حظر عضو من السيرفر")
-@app_commands.describe(member="العضو", reason="السبب")
-@app_commands.checks.has_permissions(ban_members=True)
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لا يوجد سبب"):
-    try:
-        await member.ban(reason=reason)
-        await interaction.response.send_message(f"✅ تم حظر العضو {member.mention}.", ephemeral=True)
-        await send_log(interaction.guild, "🔨 تم حظر عضو", f"العضو: {member.mention}\nالسبب: `{reason}`\nالمشرف: {interaction.user.mention}", discord.Color.dark_red())
-    except Exception as e:
-        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
-
-
-@bot.tree.command(name="unban", description="فك الحظر عن عضو بواسطة الآيدي")
-@app_commands.describe(user_id="آيدي العضو")
-@app_commands.checks.has_permissions(ban_members=True)
-async def unban(interaction: discord.Interaction, user_id: str):
-    try:
-        user = await bot.fetch_user(int(user_id))
-        await interaction.guild.unban(user)
-        await interaction.response.send_message(f"✅ تم فك الحظر عن العضو {user.name}.", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message(f"❌ حدث خطأ أو الآيدي غير صحيح: {e}", ephemeral=True)
-
-
-# ==================================
-# أوامر الإدارة والرومات (Clear, Lock, Unlock, Slowmode)
-# ==================================
-
-@bot.tree.command(name="clear", description="مسح عدد من الرسائل")
-@app_commands.describe(amount="عدد الرسائل")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def clear(interaction: discord.Interaction, amount: int):
-    await interaction.response.defer(ephemeral=True)
-    deleted = await interaction.channel.purge(limit=amount)
-    await interaction.followup.send(f"✅ تم حذف {len(deleted)} رسالة بنجاح.", ephemeral=True)
-
-
-@bot.tree.command(name="lock", description="قفل الروم الحالي")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def lock(interaction: discord.Interaction):
-    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
-    await interaction.response.send_message("🔒 تم قفل الروم بنجاح.")
-    await send_log(interaction.guild, "🔒 قفل روم", f"الروم: {interaction.channel.mention}", discord.Color.dark_grey())
-
-
-@bot.tree.command(name="unlock", description="فتح الروم الحالي")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def unlock(interaction: discord.Interaction):
-    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=True)
-    await interaction.response.send_message("🔓 تم فتح الروم بنجاح.")
-    await send_log(interaction.guild, "🔓 فتح روم", f"الروم: {interaction.channel.mention}", discord.Color.light_grey())
-
-
-@bot.tree.command(name="slowmode", description="تحديد سرعة الشات (Slowmode)")
-@app_commands.describe(seconds="عدد الثواني")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def slowmode(interaction: discord.Interaction, seconds: int):
-    await interaction.channel.edit(slowmode_delay=seconds)
-    await interaction.response.send_message(f"✅ تم ضبط Slowmode إلى {seconds} ثانية.", ephemeral=True)
-
-
-# ==================================
-# نظام Autorole
-# ==================================
-
-@bot.tree.command(name="autorole", description="تحديد الرول التلقائي للأعضاء الجدد")
-@app_commands.describe(role="الرول")
-@app_commands.checks.has_permissions(administrator=True)
-async def autorole(interaction: discord.Interaction, role: discord.Role):
-    cfg = {}
-    if os.path.exists("config.json"):
-        with open("config.json", "r", encoding="utf-8") as f:
-            try:
-                cfg = json.load(f)
+                await message.delete()
+                await message.author.timeout(timedelta(minutes=5), reason="Mass Mention")
+                await send_log(
+                    message.guild,
+                    "🚨 Mass Mention",
+                    f"العضو: {message.author.mention}\nالسبب: منشن جماعي\nالعقوبة: Timeout 5 دقائق",
+                    discord.Color.red()
+                )
             except:
                 pass
-    
-    cfg[str(interaction.guild.id)] = {"autorole_id": role.id}
-    with open("config.json", "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=4, ensure_ascii=False)
+            return
 
-    await interaction.response.send_message(f"✅ تم ضبط الرول التلقائي إلى {role.mention}", ephemeral=True)
-
-
-# ==================================
-# نظام الأوامر المختصرة والنصية
-# ==================================
-
-CUSTOM_COMMANDS_FILE = "custom_commands.json"
-
-def load_custom_commands():
-    if os.path.exists(CUSTOM_COMMANDS_FILE):
-        with open(CUSTOM_COMMANDS_FILE, "r", encoding="utf-8") as f:
+    if config.get("mention"):
+        if len(message.mentions) >= 5:
             try:
-                return json.load(f)
+                await message.delete()
+                await message.author.timeout(timedelta(minutes=3), reason="Spam Mentions")
+                await send_log(
+                    message.guild,
+                    "🚨 Mention Spam",
+                    f"العضو: {message.author.mention}\nعدد المنشنات: {len(message.mentions)}\nالعقوبة: Timeout",
+                    discord.Color.orange()
+                )
             except:
-                return {}
-    return {}
+                pass
+            return
 
-def save_custom_commands():
-    with open(CUSTOM_COMMANDS_FILE, "w", encoding="utf-8") as f:
-        json.dump(custom_commands, f, indent=4, ensure_ascii=False)
-
-custom_commands = load_custom_commands()
-
-COMMAND_LIST = [
-    "lock",
-    "unlock",
-    "clear",
-    "warn",
-    "kick",
-    "ban",
-    "slowmode"
-]
-
-
-@bot.tree.command(name="add-command", description="إنشاء أمر مختصر مثل قفل أو مسح")
-@app_commands.describe(
-    name="الكلمة التي ستكتبها",
-    command="الأمر الذي سيتم تنفيذه",
-    channel="الروم (اختياري)"
-)
-@app_commands.choices(
-    command=[
-        app_commands.Choice(name="قفل", value="lock"),
-        app_commands.Choice(name="فتح", value="unlock"),
-        app_commands.Choice(name="مسح", value="clear"),
-        app_commands.Choice(name="تحذير", value="warn"),
-        app_commands.Choice(name="طرد", value="kick"),
-        app_commands.Choice(name="بان", value="ban"),
-        app_commands.Choice(name="Slowmode", value="slowmode")
-    ]
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def add_command(
-    interaction: discord.Interaction,
-    name: str,
-    command: str,
-    channel: discord.TextChannel = None
-):
-    gid = str(interaction.guild.id)
-
-    if gid not in custom_commands:
-        custom_commands[gid] = {}
-
-    custom_commands[gid][name] = {
-        "command": command,
-        "channel_id": channel.id if channel else None
-    }
-
-    save_custom_commands()
-
-    await interaction.response.send_message(
-        f"✅ تم إنشاء الأمر المختصر `{name}` للأمر `{command}`",
-        ephemeral=True
-    )
-
-
-@bot.tree.command(name="delete-command", description="حذف أمر نصي")
-@app_commands.describe(command="اسم الأمر المراد حذفه")
-@app_commands.checks.has_permissions(administrator=True)
-async def delete_command(
-    interaction: discord.Interaction,
-    command: str
-):
-    guild_id = str(interaction.guild.id)
-
-    if guild_id not in custom_commands:
-        await interaction.response.send_message(
-            "❌ لا توجد أوامر.",
-            ephemeral=True
-        )
-        return
-
-    if command not in custom_commands[guild_id]:
-        await interaction.response.send_message(
-            "❌ هذا الأمر غير موجود.",
-            ephemeral=True
-        )
-        return
-
-    del custom_commands[guild_id][command]
-    save_custom_commands()
-
-    await interaction.response.send_message(
-        f"✅ تم حذف الأمر `{command}`.",
-        ephemeral=True
-    )
-
-
-@bot.tree.command(name="edit-command", description="تعديل أمر نصي")
-@app_commands.describe(
-    command="اسم الأمر",
-    new_action="الأمر الجديد",
-    channel="الروم الجديد (اختياري)"
-)
-@app_commands.choices(new_action=[
-    app_commands.Choice(name="قفل", value="lock"),
-    app_commands.Choice(name="فتح", value="unlock"),
-    app_commands.Choice(name="مسح", value="clear"),
-    app_commands.Choice(name="تحذير", value="warn"),
-    app_commands.Choice(name="طرد", value="kick"),
-    app_commands.Choice(name="بان", value="ban"),
-    app_commands.Choice(name="Slowmode", value="slowmode")
-])
-@app_commands.checks.has_permissions(administrator=True)
-async def edit_command(
-    interaction: discord.Interaction,
-    command: str,
-    new_action: str,
-    channel: discord.TextChannel = None
-):
-    guild_id = str(interaction.guild.id)
-
-    if command not in custom_commands.get(guild_id, {}):
-        await interaction.response.send_message(
-            "❌ الأمر غير موجود.",
-            ephemeral=True
-        )
-        return
-
-    custom_commands[guild_id][command] = {
-        "command": new_action,
-        "channel_id": channel.id if channel else None
-    }
-
-    save_custom_commands()
-
-    await interaction.response.send_message(
-        f"✅ تم تعديل الأمر `{command}`.",
-        ephemeral=True
-    )
-
-
-@bot.tree.command(name="commands-list", description="عرض الأوامر النصية المضافة")
-async def commands_list(interaction: discord.Interaction):
-    data = custom_commands.get(str(interaction.guild.id), {})
-
-    if not data:
-        await interaction.response.send_message(
-            "❌ لا توجد أوامر مضافة",
-            ephemeral=True
-        )
-        return
-
-    text = ""
-
-    for cmd, info in data.items():
-        text += f"🔹 `{cmd}` → {info.get('command') or info.get('action')}\n"
-
-    embed = discord.Embed(
-        title="📋 الأوامر النصية",
-        description=text,
-        color=discord.Color.blue()
-    )
-
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
+    if config.get("badwords"):
+        content = message.content.lower()
+        for word in bad_words:
+            if word in content:
+                try:
+                    await message.delete()
+                    await message.author.timeout(timedelta(minutes=2), reason="Bad Words")
+                    await send_log(
+                        message.guild,
+                        "🤬 كلمة ممنوعة",
+                        f"العضو: {message.author.mention}\nالكلمة: `{word}`\nالعقوبة: Timeout",
+                        discord.Color.dark_red()
+                    )
+                except:
+                    pass
+                return
 
 # ==================================
-# نظام Anti-Spam التلقائي والأوامر المخصصة
+# نظام معالجة الرسائل الموحد (On Message)
 # ==================================
 
 user_message_timestamps = {}
@@ -912,313 +305,646 @@ async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    if has_mod_permission(message.author):
+    await anti_check(message)
 
-        args = message.content.split()
-        command = args[0].lower() if args else ""
+    guild_id = str(message.guild.id)
+    content = message.content.lower()
 
-        # ======================
-        # قفل
-        # ======================
-        if command == "قفل":
-            channel = message.channel
-
-            if len(args) > 1:
-                try:
-                    channel = message.guild.get_channel(int(args[1].replace("<#", "").replace(">", "")))
-                except:
-                    pass
-
-            await channel.set_permissions(
-                message.guild.default_role,
-                send_messages=False
-            )
-
-            await message.reply(f"🔒 تم قفل {channel.mention}")
-            return
-
-
-        # ======================
-        # فتح
-        # ======================
-        if command == "فتح":
-            channel = message.channel
-
-            if len(args) > 1:
-                try:
-                    channel = message.guild.get_channel(int(args[1].replace("<#", "").replace(">", "")))
-                except:
-                    pass
-
-            await channel.set_permissions(
-                message.guild.default_role,
-                send_messages=True
-            )
-
-            await message.reply(f"🔓 تم فتح {channel.mention}")
-            return
-
-
-        # ======================
-        # مسح
-        # ======================
-        if command == "مسح":
-
-            if len(args) < 2:
-                await message.reply("❌ مثال: مسح 50")
-                return
-
-            try:
-                amount = int(args[1])
-
-                deleted = await message.channel.purge(
-                    limit=amount + 1
-                )
-
-                msg = await message.channel.send(
-                    f"🧹 تم مسح {len(deleted)-1} رسالة"
-                )
-
-                await msg.delete(delay=5)
-
-            except:
-                await message.reply("❌ الرقم غير صحيح")
-
-            return
-
-
-        # ======================
-        # Slowmode
-        # ======================
-        if command == "slowmode":
-
-            if len(args) < 2:
-                await message.reply("❌ مثال: slowmode 10")
-                return
-
-            try:
-                seconds = int(args[1])
-
-                await message.channel.edit(
-                    slowmode_delay=seconds
-                )
-
-                await message.reply(
-                    f"🐌 تم وضع Slowmode {seconds} ثانية"
-                )
-
-            except:
-                await message.reply("❌ الرقم غير صحيح")
-
-            return
-
-
-        # ======================
-        # تحذير
-        # ======================
-        if command in ["تحذير", "warn"]:
-
-            if not message.mentions:
-                await message.reply(
-                    "❌ مثال: تحذير @العضو السبب"
-                )
-                return
-
-            member = message.mentions[0]
-
-            reason = " ".join(args[2:])
-
-            if not reason:
-                reason = "بدون سبب"
-
-            warnings = load_warnings()
-
-            gid = str(message.guild.id)
-            uid = str(member.id)
-
-            if gid not in warnings:
-                warnings[gid] = {}
-
-            if uid not in warnings[gid]:
-                warnings[gid][uid] = []
-
-
-            warnings[gid][uid].append({
-                "reason": reason,
-                "moderator": message.author.name,
-                "date": datetime.utcnow().strftime("%Y/%m/%d %H:%M")
-            })
-
-            save_warnings(warnings)
-
-
+    user_id_str = str(message.author.id)
+    if user_id_str in afk_users:
+        del afk_users[user_id_str]
+        save_json(AFK_FILE, afk_users)
+        try:
             await message.reply(
-                f"⚠️ تم تحذير {member.mention}\nالسبب: {reason}"
+                "👋 أهلاً بعودتك، تم إزالة AFK عنك.",
+                delete_after=5
             )
+        except:
+            pass
 
-            return
-
-
-        # ======================
-        # طرد
-        # ======================
-        if command == "طرد":
-
-            if not message.mentions:
+    for member in message.mentions:
+        member_id_str = str(member.id)
+        if member_id_str in afk_users:
+            data = afk_users[member_id_str]
+            try:
                 await message.reply(
-                    "❌ مثال: طرد @العضو السبب"
+                    f"💤 {member.mention} حالياً AFK\n"
+                    f"📝 السبب: `{data['reason']}`\n"
+                    f"⏰ منذ: `{data['time']}`",
+                    delete_after=10
                 )
+            except:
+                pass
+
+    prot = protection_config.get(guild_id, {})
+    
+    if prot.get("anti_links") or prot.get("links"):
+        if re.findall(r"https?://\S+", content):
+            if not has_mod_permission(message.author):
+                try:
+                    await message.delete()
+                    await message.author.timeout(timedelta(minutes=2), reason="إرسال رابط ممنوع")
+                    await send_log(message.guild, "🔗 رابط ممنوع", f"العضو: {message.author.mention}", discord.Color.red())
+                except:
+                    pass
                 return
 
-            member = message.mentions[0]
-
-            reason = " ".join(args[2:])
-
-            if not reason:
-                reason = "بدون سبب"
-
-
-            try:
-                await member.kick(reason=reason)
-
-                await message.reply(
-                    f"👢 تم طرد {member.mention}\nالسبب: {reason}"
-                )
-
-            except:
-                await message.reply(
-                    "❌ لا أستطيع طرد هذا العضو"
-                )
-
-            return
-
-
-        # ======================
-        # بان
-        # ======================
-        if command == "بان":
-
-            if not message.mentions:
-                await message.reply(
-                    "❌ مثال: بان @العضو السبب"
-                )
+    if prot.get("anti_invite") or prot.get("invites"):
+        if "discord.gg/" in content or "discord.com/invite/" in content:
+            if not has_mod_permission(message.author):
+                try:
+                    await message.delete()
+                    await message.author.timeout(timedelta(minutes=5), reason="إرسال دعوة ديسكورد")
+                    await send_log(message.guild, "🚫 دعوة سيرفر ممنوعة", f"العضو: {message.author.mention}", discord.Color.dark_red())
+                except:
+                    pass
                 return
 
+    uid = str(message.author.id)
+    if guild_id not in xp_data:
+        xp_data[guild_id] = {}
+    if uid not in xp_data[guild_id]:
+        xp_data[guild_id][uid] = {"xp": 0, "level": 1}
+    
+    xp_data[guild_id][uid]["xp"] += random.randint(5, 15)
+    current_xp = xp_data[guild_id][uid]["xp"]
+    current_level = xp_data[guild_id][uid]["level"]
+    
+    if current_xp >= current_level * 100:
+        xp_data[guild_id][uid]["level"] += 1
+        await message.channel.send(f"🎉 مبروك {message.author.mention} وصلت للمستوى `{current_level + 1}`!")
+    save_json(XP_FILE, xp_data)
 
-            member = message.mentions[0]
-
-            reason = " ".join(args[2:])
-
-            if not reason:
-                reason = "بدون سبب"
-
-
-            try:
-                await member.ban(reason=reason)
-
-                await message.reply(
-                    f"🔨 تم حظر {member.mention}\nالسبب: {reason}"
-                )
-
-            except:
-                await message.reply(
-                    "❌ لا أستطيع حظر هذا العضو"
-                )
-
-            return
-
-
-    # الأوامر المختصرة
-    guild_commands = custom_commands.get(
-        str(message.guild.id),
-        {}
-    )
-
-    if message.content in guild_commands:
-
-        data = guild_commands[message.content]
-
-        action = data["command"]
-
-        if action == "lock":
-            await message.channel.set_permissions(
-                message.guild.default_role,
-                send_messages=False
-            )
-
-            await message.reply("🔒 تم القفل")
-
-        elif action == "unlock":
-            await message.channel.set_permissions(
-                message.guild.default_role,
-                send_messages=True
-            )
-
-            await message.reply("🔓 تم الفتح")
-
-
-    # نظام Anti-Spam التلقائي
     user_id = message.author.id
     now = time.time()
     if user_id not in user_message_timestamps:
         user_message_timestamps[user_id] = []
-    
     user_message_timestamps[user_id] = [t for t in user_message_timestamps[user_id] if now - t < 5]
     user_message_timestamps[user_id].append(now)
 
-    if len(user_message_timestamps[user_id]) >= 5:
+    # تم رفع الحد إلى 8 رسائل خلال 5 ثواني لمنع التايم أوت العشوائي
+    if len(user_message_timestamps[user_id]) >= 8:
         try:
-            await message.author.timeout(timedelta(minutes=2), reason="Anti-Spam: إرسال رسائل متعددة بسرعة")
-            await message.channel.send(f"⚠️ {message.author.mention} تم إعطاؤك تايم أوت تلقائي بسبب السبام!", delete_after=5)
+            await message.author.timeout(timedelta(minutes=2), reason="Anti-Spam")
+            await message.channel.send(f"⚠️ {message.author.mention} تم إعطاؤك تايم أوت بسبب السبام!", delete_after=5)
             user_message_timestamps[user_id] = []
         except:
             pass
 
     await bot.process_commands(message)
 
+# ==================================
+# نظام التقديمات المتكامل
+# ==================================
+
+def has_pending_application(guild_id, user_id):
+    guild_apps = applications_data.get(str(guild_id), [])
+    for app in guild_apps:
+        if app.get("user_id") == user_id and app.get("status") == "pending":
+            return True
+    return False
+
+async def send_application_result(member, accepted, reason, guild):
+    if accepted:
+        embed = discord.Embed(
+            title="🎉 تم قبول طلبك",
+            description=f"نبارك لك {member.mention}\n\nتم قبول طلب التقديم الخاص بك.",
+            color=discord.Color.green(),
+            timestamp=datetime.utcnow()
+        )
+    else:
+        embed = discord.Embed(
+            title="❌ تم رفض طلبك",
+            description=f"نعتذر {member.mention}\n\nالسبب:\n{reason}",
+            color=discord.Color.red(),
+            timestamp=datetime.utcnow()
+        )
+    try:
+        await member.send(embed=embed)
+    except:
+        pass
+
+async def save_application_decision(guild, user, admin, status, reason):
+    gid = str(guild.id)
+    if gid not in application_decisions:
+        application_decisions[gid] = []
+    application_decisions[gid].append({
+        "user": user.id if user else 0,
+        "admin": admin.id,
+        "status": status,
+        "reason": reason,
+        "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    })
+    save_application_decisions()
+
+class ApplicationDecisionView(discord.ui.View):
+    def __init__(self, user_id, app_id):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+        self.app_id = app_id
+
+    @discord.ui.button(label="قبول", emoji="✅", style=discord.ButtonStyle.green, custom_id=f"app_accept_{app_id}")
+    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.process(interaction, True)
+
+    @discord.ui.button(label="رفض", emoji="❌", style=discord.ButtonStyle.red, custom_id=f"app_reject_{app_id}")
+    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(RejectReasonModal(self.user_id, self.app_id))
+
+    async def process(self, interaction, accepted, reason="بدون سبب"):
+        gid = str(interaction.guild.id)
+        if gid in applications_data:
+            for app in applications_data[gid]:
+                if app.get("id") == self.app_id:
+                    app["status"] = "accepted" if accepted else "rejected"
+                    break
+            save_applications()
+
+        member = interaction.guild.get_member(self.user_id)
+        if accepted:
+            role_id = application_config.get(gid, {}).get("accepted_role")
+            if role_id and member:
+                role = interaction.guild.get_role(role_id)
+                if role:
+                    try:
+                        await member.add_roles(role)
+                    except:
+                        pass
+
+        await save_application_decision(
+            interaction.guild,
+            member,
+            interaction.user,
+            "accepted" if accepted else "rejected",
+            reason
+        )
+
+        if member:
+            await send_application_result(member, accepted, reason, interaction.guild)
+
+        await interaction.response.send_message("✅ تم تنفيذ القرار", ephemeral=True)
+
+class RejectReasonModal(discord.ui.Modal, title="سبب رفض التقديم"):
+    def __init__(self, user_id, app_id):
+        super().__init__()
+        self.user_id = user_id
+        self.app_id = app_id
+        self.reason_input = discord.ui.TextInput(
+            label="سبب الرفض",
+            placeholder="اكتب سبب الرفض هنا...",
+            style=discord.TextStyle.paragraph,
+            required=True
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        gid = str(interaction.guild.id)
+        if gid in applications_data:
+            for app in applications_data[gid]:
+                if app.get("id") == self.app_id:
+                    app["status"] = "rejected"
+                    app["reject_reason"] = self.reason_input.value
+                    break
+            save_applications()
+
+        member = interaction.guild.get_member(self.user_id)
+        await save_application_decision(
+            interaction.guild,
+            member,
+            interaction.user,
+            "rejected",
+            self.reason_input.value
+        )
+
+        if member:
+            await send_application_result(member, False, self.reason_input.value, interaction.guild)
+
+        await interaction.response.send_message("❌ تم رفض الطلب وإرسال السبب للعضو", ephemeral=True)
+
+class DynamicApplicationModal(discord.ui.Modal):
+    def __init__(self, guild_id, app_type):
+        super().__init__(title=f"تقديم {app_type}")
+        self.guild_id = guild_id
+        self.app_type = app_type
+        questions = application_questions.get(str(guild_id), ["اسمك", "عمرك", "لماذا تريد الانضمام؟"])
+        for question in questions[:5]:
+            self.add_item(
+                discord.ui.TextInput(
+                    label=question[:45],
+                    required=True,
+                    style=discord.TextStyle.paragraph
+                )
+            )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        gid = str(self.guild_id)
+        if gid not in applications_data:
+            applications_data[gid] = []
+
+        answers = [item.value for item in self.children]
+        # استخدام معرف عشوائي لمنع تكرار الأرقام عند حذف تقديمات سابقة
+        app_id = random.randint(100000, 999999)
+
+        applications_data[gid].append({
+            "id": app_id,
+            "user_id": interaction.user.id,
+            "type": self.app_type,
+            "answers": answers,
+            "status": "pending"
+        })
+
+        if gid not in application_cooldowns:
+            application_cooldowns[gid] = {}
+        application_cooldowns[gid][str(interaction.user.id)] = time.time()
+
+        save_applications()
+        save_application_cooldowns()
+
+        config = application_config.get(gid, {})
+        result_channel_id = config.get("results") or config.get("results_channel")
+        if result_channel_id:
+            channel = interaction.guild.get_channel(result_channel_id)
+            if channel:
+                embed = discord.Embed(
+                    title="📩 تقديم جديد",
+                    color=discord.Color.blue(),
+                    timestamp=datetime.utcnow()
+                )
+                embed.add_field(name="العضو", value=interaction.user.mention, inline=False)
+                embed.add_field(name="النوع", value=self.app_type, inline=True)
+                embed.add_field(name="رقم التقديم", value=str(app_id), inline=True)
+                for i, answer in enumerate(answers):
+                    embed.add_field(name=f"السؤال {i+1}", value=answer, inline=False)
+
+                view = ApplicationDecisionView(interaction.user.id, app_id)
+                bot.add_view(view)
+                await channel.send(
+                    embed=embed,
+                    view=view
+                )
+
+        await interaction.response.send_message("✅ تم إرسال التقديم بنجاح", ephemeral=True)
+
+class ApplicationTypeSelect(discord.ui.Select):
+    def __init__(self, guild_id):
+        options = []
+        types = application_types.get(str(guild_id), [])
+        if not types:
+            options.append(discord.SelectOption(label="تقديم عام", description="التقديم الافتراضي بالسيرفر"))
+        else:
+            for item in types:
+                if item.get("enabled", True):
+                    options.append(discord.SelectOption(label=item["name"], description=item.get("description", "بدون وصف")))
+        super().__init__(placeholder="اختر نوع التقديم", options=options)
+        self.guild_id = guild_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if has_pending_application(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ لديك تقديم قيد المراجعة بالفعل", ephemeral=True)
+            return
+        await interaction.response.send_modal(DynamicApplicationModal(self.guild_id, self.values[0]))
+
+class ApplicationTypeSelectView(discord.ui.View):
+    def __init__(self, guild_id):
+        super().__init__(timeout=None)
+        self.add_item(ApplicationTypeSelect(guild_id))
+
+class ApplicationButtonView(discord.ui.View):
+    def __init__(self, guild_id, button_text, button_emoji):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        
+        btn = discord.ui.Button(
+            label=button_text,
+            emoji=button_emoji,
+            style=discord.ButtonStyle.green,
+            custom_id=f"open_application_btn_{guild_id}"
+        )
+        btn.callback = self.button_callback
+        self.add_item(btn)
+
+    async def button_callback(self, interaction: discord.Interaction):
+        types = application_types.get(str(self.guild_id), [])
+        if len(types) > 1:
+            await interaction.response.send_message("اختر نوع التقديم المناسب:", view=ApplicationTypeSelectView(self.guild_id), ephemeral=True)
+        else:
+            app_type = types[0]["name"] if types else "تقديم عام"
+            if has_pending_application(interaction.guild.id, interaction.user.id):
+                await interaction.response.send_message("❌ لديك تقديم قيد المراجعة بالفعل", ephemeral=True)
+                return
+            await interaction.response.send_modal(DynamicApplicationModal(self.guild_id, app_type))
+
+# أوامر إدارة التقديمات
+@bot.tree.command(name="application-setup", description="إنشاء بانل التقديم")
+@app_commands.checks.has_permissions(administrator=True)
+async def application_setup(
+    interaction: discord.Interaction,
+    panel_channel: discord.TextChannel,
+    results_channel: discord.TextChannel,
+    description: str,
+    button_text: str = "تقديم",
+    button_emoji: str = "📝",
+    image: str = None
+):
+    guild_id = str(interaction.guild.id)
+    application_config[guild_id] = {
+        "panel_channel": panel_channel.id,
+        "results": results_channel.id,
+        "description": description,
+        "button_text": button_text,
+        "emoji": button_emoji,
+        "image": image,
+        "enabled": True
+    }
+    save_application_config()
+
+    embed = discord.Embed(title="📋 التقديمات", description=description, color=discord.Color.blurple())
+    if image:
+        embed.set_image(url=image)
+
+    view = ApplicationButtonView(interaction.guild.id, button_text, button_emoji)
+    await panel_channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ تم إنشاء بانل التقديم بنجاح مع زر مخصص", ephemeral=True)
+
+@bot.tree.command(name="application-role", description="تحديد الرتبة التي تعطى عند القبول")
+@app_commands.checks.has_permissions(administrator=True)
+async def application_role(interaction: discord.Interaction, role: discord.Role):
+    guild_id = str(interaction.guild.id)
+    if guild_id not in application_config:
+        application_config[guild_id] = {}
+    application_config[guild_id]["accepted_role"] = role.id
+    save_application_config()
+    await interaction.response.send_message(f"✅ سيتم إعطاء {role.mention} عند القبول", ephemeral=True)
+
+@bot.tree.command(name="applications-list", description="عرض آخر التقديمات")
+@app_commands.checks.has_permissions(administrator=True)
+async def applications_list(interaction: discord.Interaction):
+    apps = applications_data.get(str(interaction.guild.id), [])
+    if not apps:
+        await interaction.response.send_message("لا يوجد تقديمات", ephemeral=True)
+        return
+    text = ""
+    for app in apps[-10:]:
+        text += f"#{app.get('id')} <@{app.get('user_id')}> - {app.get('status')}\n"
+    embed = discord.Embed(title="📋 آخر التقديمات", description=text, color=discord.Color.green())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="application-info", description="عرض معلومات تقديم محدد")
+async def application_info(interaction: discord.Interaction, number: int):
+    apps = applications_data.get(str(interaction.guild.id), [])
+    found = next((app for app in apps if app.get("id") == number), None)
+    if not found:
+        await interaction.response.send_message("❌ لم يتم العثور على التقديم", ephemeral=True)
+        return
+    embed = discord.Embed(title=f"📋 تقديم رقم {number}", color=discord.Color.blue())
+    embed.add_field(name="العضو", value=f"<@{found.get('user_id')}>", inline=False)
+    embed.add_field(name="الحالة", value=found.get("status"), inline=False)
+    for i, ans in enumerate(found.get("answers", [])):
+        embed.add_field(name=f"الإجابة {i+1}", value=ans, inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ==================================
-# تشغيل البوت واستعادة الفيوهات
+# أوامر الإدارة والعقوبات الأخرى
+# ==================================
+
+@bot.tree.command(name="anti-setup", description="تشغيل أنظمة الحماية")
+@app_commands.checks.has_permissions(administrator=True)
+async def anti_setup(interaction: discord.Interaction):
+    anti_config[str(interaction.guild.id)] = {
+        "mention": True,
+        "massmention": True,
+        "badwords": True
+    }
+    save_json(ANTI_CONFIG_FILE, anti_config)
+    await interaction.response.send_message("✅ تم تشغيل أنظمة الحماية", ephemeral=True)
+
+@bot.tree.command(name="announce", description="إرسال إعلان Embed")
+@app_commands.describe(channel="الروم", title="العنوان", text="النص")
+@app_commands.checks.has_permissions(administrator=True)
+async def announce(interaction: discord.Interaction, channel: discord.TextChannel, title: str, text: str):
+    embed = discord.Embed(title=title, description=text, color=discord.Color.blue(), timestamp=datetime.utcnow())
+    embed.set_footer(text=interaction.guild.name)
+    await channel.send(embed=embed)
+    await interaction.response.send_message("✅ تم إرسال الإعلان", ephemeral=True)
+
+@bot.tree.command(name="say", description="جعل البوت يرسل رسالة")
+@app_commands.describe(text="الرسالة")
+@app_commands.checks.has_permissions(administrator=True)
+async def say(interaction: discord.Interaction, text: str):
+    await interaction.channel.send(text)
+    await interaction.response.send_message("✅ تم الإرسال", ephemeral=True)
+
+@bot.tree.command(name="set-welcome", description="تحديد روم وإعداد رسالة الترحيب")
+@app_commands.describe(channel="روم الترحيب", message="رسالة الترحيب")
+async def set_welcome(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ هذا الأمر للمشرفين فقط", ephemeral=True)
+        return
+    welcome_config[str(interaction.guild.id)] = {"channel_id": channel.id, "message": message}
+    save_json(WELCOME_CONFIG_FILE, welcome_config)
+    await interaction.response.send_message(f"✅ تم ضبط نظام الترحيب في {channel.mention}!", ephemeral=True)
+
+@bot.tree.command(name="warn", description="تحذير عضو")
+@app_commands.describe(member="العضو", reason="السبب")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def warn(interaction: discord.Interaction, member: discord.Member, reason: str):
+    warnings = load_json(WARNINGS_FILE)
+    gid, uid = str(interaction.guild.id), str(member.id)
+    if gid not in warnings: warnings[gid] = {}
+    if uid not in warnings[gid]: warnings[gid][uid] = []
+    
+    warnings[gid][uid].append({"reason": reason, "moderator": interaction.user.name, "date": datetime.utcnow().strftime("%Y/%m/%d %H:%M")})
+    save_json(WARNINGS_FILE, warnings)
+    await interaction.response.send_message(f"✅ تم تحذير العضو {member.mention}.", ephemeral=True)
+    await send_log(interaction.guild, "⚠️ تحذير عضو", f"العضو: {member.mention}\nالسبب: `{reason}`", discord.Color.orange())
+
+@bot.tree.command(name="timeout", description="إعطاء تايم أوت لعضو")
+@app_commands.describe(member="العضو", duration="المدة بالدقائق", reason="السبب")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def timeout(interaction: discord.Interaction, member: discord.Member, duration: int, reason: str = "لا يوجد سبب"):
+    try:
+        await member.timeout(timedelta(minutes=duration), reason=reason)
+        await interaction.response.send_message(f"✅ تم إعطاء تايم أوت لـ {member.mention}.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
+
+@bot.tree.command(name="kick", description="طرد عضو")
+@app_commands.checks.has_permissions(kick_members=True)
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لا يوجد سبب"):
+    try:
+        await member.kick(reason=reason)
+        await interaction.response.send_message(f"✅ تم طرد {member.mention}.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
+
+@bot.tree.command(name="ban", description="حظر عضو")
+@app_commands.checks.has_permissions(ban_members=True)
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لا يوجد سبب"):
+    try:
+        await member.ban(reason=reason)
+        await interaction.response.send_message(f"✅ تم حظر {member.mention}.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
+
+@bot.tree.command(name="clear", description="مسح الرسائل")
+@app_commands.checks.has_permissions(manage_messages=True)
+async def clear(interaction: discord.Interaction, amount: int):
+    await interaction.response.defer(ephemeral=True)
+    deleted = await interaction.channel.purge(limit=amount)
+    await interaction.followup.send(f"✅ تم حذف {len(deleted)} رسالة.", ephemeral=True)
+
+@bot.tree.command(name="lock", description="قفل الروم")
+@app_commands.checks.has_permissions(manage_channels=True)
+async def lock(interaction: discord.Interaction):
+    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
+    await interaction.response.send_message("🔒 تم قفل الروم بنجاح.")
+
+@bot.tree.command(name="unlock", description="فتح الروم")
+@app_commands.checks.has_permissions(manage_channels=True)
+async def unlock(interaction: discord.Interaction):
+    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=True)
+    await interaction.response.send_message("🔓 تم فتح الروم بنجاح.")
+
+@bot.tree.command(name="afk", description="تفعيل وضع AFK")
+@app_commands.describe(reason="سبب الغياب")
+async def afk(interaction: discord.Interaction, reason: str = "بدون سبب"):
+    afk_users[str(interaction.user.id)] = {
+        "reason": reason,
+        "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    save_json(AFK_FILE, afk_users)
+    await interaction.response.send_message(f"💤 تم تفعيل AFK\nالسبب: `{reason}`", ephemeral=True)
+
+@bot.tree.command(name="unafk", description="إلغاء وضع AFK")
+async def unafk(interaction: discord.Interaction):
+    user_id = str(interaction.user.id)
+    if user_id in afk_users:
+        del afk_users[user_id]
+        save_json(AFK_FILE, afk_users)
+        await interaction.response.send_message("✅ تم إلغاء وضع AFK", ephemeral=True)
+    else:
+        await interaction.response.send_message("❌ أنت لست AFK", ephemeral=True)
+
+@bot.tree.command(name="suggest", description="إرسال اقتراح للسيرفر")
+async def suggest(interaction: discord.Interaction, suggestion: str):
+    embed = discord.Embed(title="💡 اقتراح جديد", description=suggestion, color=discord.Color.blue(), timestamp=datetime.utcnow())
+    embed.set_footer(text=f"بواسطة {interaction.user}")
+    msg = await interaction.channel.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+    await interaction.response.send_message("✅ تم إرسال اقتراحك.", ephemeral=True)
+
+@bot.tree.command(name="rank", description="عرض مستوى العضو")
+async def rank(interaction: discord.Interaction, member: discord.Member = None):
+    member = member or interaction.user
+    data = xp_data.get(str(interaction.guild.id), {}).get(str(member.id), {"xp": 0, "level": 1})
+    embed = discord.Embed(title="🏆 المستوى", description=f"👤 العضو: {member.mention}\n⭐ المستوى: `{data['level']}`\n✨ XP: `{data['xp']}`", color=discord.Color.gold())
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="bot-status", description="عرض حالة البوت")
+async def bot_status(interaction: discord.Interaction):
+    latency = round(bot.latency * 1000)
+    embed = discord.Embed(title="🤖 حالة البوت", color=discord.Color.green())
+    embed.add_field(name="🟢 الحالة", value="Online")
+    embed.add_field(name="📡 Ping", value=f"{latency}ms")
+    embed.add_field(name="🌐 السيرفرات", value=len(bot.guilds))
+    await interaction.response.send_message(embed=embed)
+
+# ==================================
+# نظام Reaction Roles (Slash Command)
+# ==================================
+
+class ReactionRoleView(discord.ui.View):
+    def __init__(self, role_id: int):
+        super().__init__(timeout=None)
+        self.role_id = role_id
+        button = discord.ui.Button(
+            label="🎭 أخذ / إزالة الرتبة",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"reaction_role_btn_{role_id}"
+        )
+        button.callback = self.role_button
+        self.add_item(button)
+
+    async def role_button(self, interaction: discord.Interaction):
+        role = interaction.guild.get_role(self.role_id)
+        if not role:
+            await interaction.response.send_message("❌ الرتبة غير موجودة في السيرفر", ephemeral=True)
+            return
+
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+
+@bot.tree.command(name="reaction-role", description="إنشاء زر للحصول على رتبة")
+@app_commands.describe(role="الرتبة", channel="الروم", text="النص الذي سيظهر")
+@app_commands.checks.has_permissions(administrator=True)
+async def reaction_role(interaction: discord.Interaction, role: discord.Role, channel: discord.TextChannel, text: str):
+    embed = discord.Embed(title="🎭 رتبة تلقائية", description=text, color=discord.Color.blue())
+    embed.add_field(name="اضغط الزر للحصول على:", value=role.mention)
+
+    msg = await channel.send(embed=embed, view=ReactionRoleView(role.id))
+    reaction_roles[str(msg.id)] = {"role_id": role.id, "channel_id": channel.id, "guild_id": interaction.guild.id}
+    save_json(REACTION_ROLES_FILE, reaction_roles)
+    bot.add_view(ReactionRoleView(role.id), message_id=msg.id)
+
+    await interaction.response.send_message("✅ تم إنشاء رتبة الزر بنجاح", ephemeral=True)
+
+# ==================================
+# أحداث التشغيل والتجهيز (On Ready)
 # ==================================
 
 @bot.event
 async def on_ready():
-    print(f"✅ Bot Online: {bot.user}")
-    
-    saved_giveaways = load_giveaways()
-    for gid_str, gdata in saved_giveaways.items():
+    print("="*40)
+    print(f"🤖 Bot Online : {bot.user}")
+    print(f"🌐 Servers : {len(bot.guilds)}")
+    print("="*40)
+
+    for msg_id, data in reaction_roles.items():
         try:
-            channel = bot.get_channel(gdata["channel_id"])
-            if channel:
-                msg = await channel.fetch_message(gdata["message_id"])
-                end_time = datetime.fromisoformat(gdata["end_time"])
-                
-                view = GiveawayView(int(gid_str))
-                bot.add_view(view, message_id=gdata["message_id"])
-                
-                if datetime.utcnow() < end_time:
-                    restored_data = {
-                        "id": gdata["id"],
-                        "prize": gdata["prize"],
-                        "winners_count": gdata["winners_count"],
-                        "image_url": gdata["image_url"],
-                        "participants": gdata["participants"],
-                        "message": msg,
-                        "end_time": end_time,
-                        "creator": gdata.get("creator", "Unknown")
-                    }
-                    giveaways[int(gid_str)] = restored_data
-                    bot.loop.create_task(giveaway_timer(restored_data))
-        except Exception as e:
-            print(f"Error restoring giveaway {gid_str}: {e}")
+            bot.add_view(ReactionRoleView(data["role_id"]), message_id=int(msg_id))
+        except Exception:
+            pass
+
+    for guild_id, config_data in application_config.items():
+        try:
+            bot.add_view(ApplicationButtonView(
+                int(guild_id),
+                config_data.get("button_text", "تقديم"),
+                config_data.get("emoji", "📝")
+            ))
+        except Exception:
+            pass
+
+    for guild_apps in applications_data.values():
+        for app in guild_apps:
+            if app.get("status") == "pending":
+                try:
+                    bot.add_view(
+                        ApplicationDecisionView(
+                            app["user_id"],
+                            app["id"]
+                        )
+                    )
+                except Exception:
+                    pass
 
     try:
-        guild = discord.Object(id=GUILD_ID)
-        synced = await bot.tree.sync(guild=guild)
-        print(f"✅ Synced {len(synced)} Guild Commands")
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} commands globally")
     except Exception as e:
         print(f"❌ Sync Error: {e}")
+        save_error(e)
 
-
+# ==================================
+# تشغيل البوت
+# ==================================
 TOKEN = os.getenv("DISCORD_TOKEN")
-bot.run(TOKEN)
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("❌ Token not found! Please set DISCORD_TOKEN environment variable.")
