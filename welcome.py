@@ -38,6 +38,7 @@ intents.members = True
 intents.message_content = True
 intents.guild_messages = True
 intents.reactions = True
+intents.voice_states = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -693,6 +694,129 @@ async def clear(interaction: discord.Interaction, amount: int):
 # ==================================
 # الجزء الثالث - الإدارة المتقدمة
 # ==================================
+
+START_TIME = datetime.utcnow()
+
+@bot.tree.command(name="move", description="نقل عضو إلى روم صوتي")
+@app_commands.checks.has_permissions(move_members=True)
+async def move(interaction: discord.Interaction, member: discord.Member, channel: discord.VoiceChannel):
+    if member.voice:
+        await member.move_to(channel)
+        await interaction.response.send_message(f"✅ تم نقل {member.mention} إلى {channel.mention}")
+    else:
+        await interaction.response.send_message("❌ العضو ليس في روم صوتي.", ephemeral=True)
+
+@bot.tree.command(name="deafen", description="تغميض صوت عضو")
+@app_commands.checks.has_permissions(deafen_members=True)
+async def deafen(interaction: discord.Interaction, member: discord.Member):
+    await member.edit(deafen=True)
+    await interaction.response.send_message(f"🔇 تم تغميض {member.mention}")
+
+@bot.tree.command(name="undeafen", description="إلغاء تغميض عضو")
+@app_commands.checks.has_permissions(deafen_members=True)
+async def undeafen(interaction: discord.Interaction, member: discord.Member):
+    await member.edit(deafen=False)
+    await interaction.response.send_message(f"🔊 تم إلغاء تغميض {member.mention}")
+
+@bot.tree.command(name="timeout", description="إعطاء تايم اوت لعضو")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def timeout(interaction: discord.Interaction, member: discord.Member, minutes: int):
+    await member.timeout(timedelta(minutes=minutes))
+    await interaction.response.send_message(
+        f"⏳ تم إعطاء {member.mention} تايم اوت لمدة {minutes} دقيقة"
+    )
+
+@bot.tree.command(name="rolelist", description="عرض رتب السيرفر")
+async def rolelist(interaction: discord.Interaction):
+    roles = interaction.guild.roles[1:]
+    text = "\n".join([f"{r.mention}" for r in roles[:50]])
+    embed = discord.Embed(title="📋 رتب السيرفر", description=text)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="channelinfo", description="معلومات الروم الحالي")
+async def channelinfo(interaction: discord.Interaction):
+    channel = interaction.channel
+    embed = discord.Embed(title="📢 معلومات الروم")
+    embed.add_field(name="الاسم", value=channel.name)
+    embed.add_field(name="ID", value=channel.id)
+    embed.add_field(name="النوع", value=str(channel.type))
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="botinfo", description="معلومات البوت")
+async def botinfo(interaction: discord.Interaction):
+    embed = discord.Embed(title="🤖 معلومات البوت")
+    embed.add_field(name="الاسم", value=bot.user.name)
+    embed.add_field(name="السيرفرات", value=len(bot.guilds))
+    embed.add_field(name="الأعضاء", value=sum(g.member_count for g in bot.guilds))
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="uptime", description="مدة تشغيل البوت")
+async def uptime(interaction: discord.Interaction):
+    delta = datetime.utcnow() - START_TIME
+    await interaction.response.send_message(
+        f"⏱️ البوت يعمل منذ: `{delta}`"
+    )
+
+@bot.tree.command(name="stats", description="إحصائيات السيرفر")
+async def stats(interaction: discord.Interaction):
+    guild = interaction.guild
+    embed = discord.Embed(title="📊 إحصائيات السيرفر")
+    embed.add_field(name="الأعضاء", value=guild.member_count)
+    embed.add_field(name="الرومات", value=len(guild.channels))
+    embed.add_field(name="الرتب", value=len(guild.roles))
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="autorole", description="تحديد رتبة تلقائية")
+@app_commands.checks.has_permissions(administrator=True)
+async def autorole(interaction: discord.Interaction, role: discord.Role):
+    config = load_json(CONFIG_FILE,{})
+    gid = str(interaction.guild.id)
+
+    if gid not in config:
+        config[gid] = {}
+
+    config[gid]["autorole_id"] = role.id
+    save_json(CONFIG_FILE, config)
+
+    await interaction.response.send_message(
+        f"✅ تم تحديد الرتبة التلقائية {role.mention}"
+    )
+
+@bot.tree.command(name="set-mod-role", description="تحديد رتبة الإدارة")
+@app_commands.checks.has_permissions(administrator=True)
+async def set_mod_role(interaction: discord.Interaction, role: discord.Role):
+    mod_roles[str(interaction.guild.id)] = role.id
+    save_json(MOD_CONFIG_FILE, mod_roles)
+
+    await interaction.response.send_message(
+        f"✅ تم تحديد رتبة الإدارة: {role.mention}"
+    )
+
+@bot.tree.command(name="rules", description="إرسال القوانين")
+@app_commands.checks.has_permissions(administrator=True)
+async def rules(interaction: discord.Interaction, text: str):
+    embed = discord.Embed(
+        title="📜 القوانين",
+        description=text,
+        color=discord.Color.blue()
+    )
+    await interaction.channel.send(embed=embed)
+    await interaction.response.send_message("✅ تم إرسال القوانين", ephemeral=True)
+
+@bot.tree.command(name="poll", description="إنشاء تصويت")
+async def poll(interaction: discord.Interaction, question: str):
+    embed = discord.Embed(
+        title="📊 تصويت",
+        description=question
+    )
+    msg = await interaction.channel.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+
+    await interaction.response.send_message(
+        "✅ تم إنشاء التصويت",
+        ephemeral=True
+    )
 
 @bot.tree.command(name="nickname", description="تغيير اسم عضو")
 @app_commands.checks.has_permissions(manage_nicknames=True)
