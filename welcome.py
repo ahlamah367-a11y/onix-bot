@@ -76,6 +76,14 @@ APPLICATION_DECISIONS_FILE = "application_decisions.json"
 APPLICATION_COOLDOWN_FILE = "application_cooldowns.json"
 
 # ==================================
+# General Panels System
+# ==================================
+
+GENERAL_PANELS_FILE = "general_panels.json"
+
+general_panels = load_json = lambda f, d: None # سيتم تعريف الدالة الصحيحة لاحقاً
+
+# ==================================
 # دوال التحميل والحفظ العامة
 # ==================================
 
@@ -121,6 +129,92 @@ application_types = load_json(APPLICATION_TYPES_FILE, {})
 application_questions = load_json(APPLICATION_QUESTIONS_FILE, {})
 application_decisions = load_json(APPLICATION_DECISIONS_FILE, {})
 application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
+
+# تعريف ملفات البانلات العامة
+general_panels = load_json(GENERAL_PANELS_FILE, [])
+
+def save_general_panels():
+    save_json(GENERAL_PANELS_FILE, general_panels)
+
+class GeneralPanelView(discord.ui.View):
+    def __init__(self, button_name, button_emoji, button_description):
+        super().__init__(timeout=None)
+
+        button = discord.ui.Button(
+            label=button_name,
+            emoji=button_emoji,
+            style=discord.ButtonStyle.primary,
+            custom_id=f"general_panel_{button_name}"
+        )
+
+        button.callback = self.button_callback
+        self.add_item(button)
+
+        self.button_description = button_description
+
+
+    async def button_callback(self, interaction: discord.Interaction):
+        await interaction.response.send_message(
+            self.button_description,
+            ephemeral=True
+        )
+
+
+@bot.tree.command(
+    name="panel",
+    description="إنشاء بانل عام"
+)
+@app_commands.checks.has_permissions(administrator=True)
+async def panel(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    description: str,
+    button_name: str,
+    button_emoji: str,
+    button_description: str,
+    image: str = None
+):
+
+    embed = discord.Embed(
+        title="📌 Panel",
+        description=description,
+        color=discord.Color.blurple()
+    )
+
+    if image:
+        embed.set_image(url=image)
+
+
+    view = GeneralPanelView(
+        button_name,
+        button_emoji,
+        button_description
+    )
+
+
+    msg = await channel.send(
+        embed=embed,
+        view=view
+    )
+
+
+    general_panels.append({
+        "guild_id": interaction.guild.id,
+        "channel_id": channel.id,
+        "message_id": msg.id,
+        "button_name": button_name,
+        "button_emoji": button_emoji,
+        "button_description": button_description
+    })
+
+
+    save_general_panels()
+
+
+    await interaction.response.send_message(
+        "✅ تم إنشاء البانل وحفظه بنجاح",
+        ephemeral=True
+    )
 
 def save_persistent():
     save_json(PANELS_FILE, persistent_panels)
@@ -523,15 +617,25 @@ class ApplicationControlView(discord.ui.View):
         save_all_applications()
 
         member = interaction.guild.get_member(self.user_id)
-        role_id = application_config.get(gid, {}).get("accepted_role")
+        
+        app_type = None
+        for app in applications_data.get(gid, []):
+            if app.get("id") == self.app_id:
+                app_type = app.get("type")
+                break
 
-        if role_id and member:
-            role = interaction.guild.get_role(role_id)
-            if role:
-                try:
-                    await member.add_roles(role)
-                except:
-                    pass
+        if app_type and member:
+            for t in application_types.get(gid, []):
+                if t.get("name") == app_type:
+                    role_id = t.get("role_id")
+                    if role_id:
+                        role = interaction.guild.get_role(role_id)
+                        if role:
+                            try:
+                                await member.add_roles(role)
+                            except:
+                                pass
+                    break
 
         if member:
             try:
@@ -669,11 +773,12 @@ async def application_panel(
         ephemeral=True
     )
 
-@bot.tree.command(name="application-add-type", description="إضافة نوع تقديم جديد وتحديث البانل تلقائياً")
+@bot.tree.command(name="application-add-type", description="إضافة نوع تقديم مع رتبة خاصة وتحديث البانل تلقائياً")
 @app_commands.checks.has_permissions(administrator=True)
 async def application_add_type(
     interaction: discord.Interaction,
     name: str,
+    role: discord.Role,
     description: str = "بدون وصف"
 ):
     gid = str(interaction.guild.id)
@@ -685,7 +790,8 @@ async def application_add_type(
         converted_list = []
         for k, v in application_types[gid].items():
             desc = v.get("description", "بدون وصف") if isinstance(v, dict) else "بدون وصف"
-            converted_list.append({"name": k, "description": desc, "enabled": True})
+            r_id = v.get("role_id") if isinstance(v, dict) else None
+            converted_list.append({"name": k, "description": desc, "role_id": r_id, "enabled": True})
         application_types[gid] = converted_list
 
     for app_type in application_types[gid]:
@@ -699,6 +805,7 @@ async def application_add_type(
     application_types[gid].append({
         "name": name,
         "description": description,
+        "role_id": role.id,
         "enabled": True
     })
 
@@ -748,6 +855,7 @@ async def application_add_type(
 
     await interaction.response.send_message(
         f"✅ تمت إضافة نوع التقديم: `{name}`\n"
+        f"🎭 الرتبة: {role.mention}\n"
         f"🔄 تم تحديث {updated} بانل تلقائياً.",
         ephemeral=True
     )
@@ -793,7 +901,7 @@ async def application_set_questions(
     save_all_applications()
     await interaction.response.send_message("✅ تم حفظ الأسئلة.", ephemeral=True)
 
-@bot.tree.command(name="application-set-role", description="تحديد رتبة المقبولين في التقديمات")
+@bot.tree.command(name="application-set-role", description="تحديد رتبة المقبولين العامة في التقديمات")
 @app_commands.checks.has_permissions(administrator=True)
 async def application_set_role(interaction: discord.Interaction, role: discord.Role):
     gid = str(interaction.guild.id)
@@ -801,7 +909,7 @@ async def application_set_role(interaction: discord.Interaction, role: discord.R
         application_config[gid] = {}
     application_config[gid]["accepted_role"] = role.id
     save_all_applications()
-    await interaction.response.send_message(f"✅ سيتم إعطاء رتبة {role.mention} للمقبولين تلقائياً", ephemeral=True)
+    await interaction.response.send_message(f"✅ سيتم إعطاء رتبة {role.mention} للمقبولين تلقائياً (عام)", ephemeral=True)
 
 @bot.tree.command(name="application-description", description="تعديل وصف بانل التقديم")
 @app_commands.checks.has_permissions(administrator=True)
@@ -1273,6 +1381,21 @@ async def on_ready():
                 bot.add_view(ReactionRoleView(panel["role_id"]), message_id=panel["message_id"])
         except Exception as e:
             print(f"Failed persistent view: {e}")
+            
+    # تفعيل البانلات العامة عند إعادة تشغيل البوت
+    for panel in general_panels:
+        try:
+            bot.add_view(
+                GeneralPanelView(
+                    panel["button_name"],
+                    panel["button_emoji"],
+                    panel["button_description"]
+                ),
+                message_id=panel["message_id"]
+            )
+        except Exception as e:
+            print(e)
+            
     try:
         await bot.tree.sync()
         print("✅ Synced Slash Commands successfully.")
