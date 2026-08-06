@@ -150,12 +150,20 @@ class GeneralPanelView(discord.ui.View):
         button.callback = self.button_callback
         self.add_item(button)
 
+        self.button_label = button_name
         self.button_description = button_description
 
 
     async def button_callback(self, interaction: discord.Interaction):
+
+        embed = discord.Embed(
+            title=self.button_label,
+            description=self.button_description,
+            color=discord.Color.blurple()
+        )
+
         await interaction.response.send_message(
-            self.button_description,
+            embed=embed,
             ephemeral=True
         )
 
@@ -1047,7 +1055,7 @@ async def deafen(interaction: discord.Interaction, member: discord.Member):
     await member.edit(deafen=True)
     await interaction.response.send_message(f"🔇 تم تغميض {member.mention}")
 
-@bot.tree.command(name="undeafen", description="إلغاء تغميض عضو")
+@bot.tree.command(name="undeafen", description="إلغاء تغميض صوت عضو")
 @app_commands.checks.has_permissions(deafen_members=True)
 async def undeafen(interaction: discord.Interaction, member: discord.Member):
     await member.edit(deafen=False)
