@@ -125,6 +125,9 @@ application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
 def save_persistent():
     save_json(PANELS_FILE, persistent_panels)
 
+def save_application_types():
+    save_json(APPLICATION_TYPES_FILE, application_types)
+
 def save_all_applications():
     save_json(APPLICATIONS_FILE, applications_data)
     save_json(APPLICATION_CONFIG_FILE, application_config)
@@ -396,7 +399,6 @@ async def on_message(message):
     if await anti_check(message):
         return
 
-    # معالجة XP البسيطة
     guild_id = str(message.guild.id)
     user_id_str = str(message.author.id)
     if guild_id not in xp_data: xp_data[guild_id] = {}
@@ -410,7 +412,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 # ==================================
-# نظام التقديمات المتطور (المحدث والشامل)
+# نظام التقديمات المتطور
 # ==================================
 
 def has_application(guild_id, user_id):
@@ -419,17 +421,12 @@ def has_application(guild_id, user_id):
             return True
     return False
 
-# ================================
-# مودال الأسئلة
-# ================================
-
 class ApplyModal(discord.ui.Modal):
     def __init__(self, guild_id, app_type):
         super().__init__(title=f"تقديم {app_type}")
         self.guild_id = str(guild_id)
         self.app_type = app_type
 
-        # محاولة جلب الأسئلة المخصصة للنوع المحدد، وإلا العامة، وإلا الافتراضية
         type_questions = application_questions.get(self.guild_id, {}).get(app_type)
         if not type_questions:
             type_questions = application_questions.get(
@@ -505,10 +502,6 @@ class ApplyModal(discord.ui.Modal):
             ephemeral=True
         )
 
-# ================================
-# أزرار الإدارة
-# ================================
-
 class ApplicationControlView(discord.ui.View):
     def __init__(self, user_id, app_id):
         super().__init__(timeout=None)
@@ -577,26 +570,27 @@ class ApplicationControlView(discord.ui.View):
             ephemeral=True
         )
 
-# ================================
-# قائمة أنواع التقديم (Select Menu) مع إمكانية تخصيص الزر
-# ================================
-
-class ApplicationButtonView(discord.ui.View):
-    def __init__(self, guild_id, button_name: str = None, button_emoji: str = None):
-        super().__init__(timeout=None)
-        self.add_item(ApplicationMenu(guild_id))
-
 class ApplicationMenu(discord.ui.Select):
     def __init__(self, guild_id):
         options = []
-        types = application_types.get(str(guild_id), {})
+        raw_types = application_types.get(str(guild_id), {})
         
-        if not types:
+        if not raw_types:
             options.append(discord.SelectOption(label="تقديم عام", description="التقديم الافتراضي للبوت"))
         else:
-            for name in types:
-                desc = types[name].get("description", "") if isinstance(types[name], dict) else ""
-                options.append(discord.SelectOption(label=name, description=desc[:100]))
+            if isinstance(raw_types, list):
+                for t in raw_types:
+                    name = t.get("name") if isinstance(t, dict) else str(t)
+                    desc = t.get("description", "") if isinstance(t, dict) else ""
+                    if name:
+                        options.append(discord.SelectOption(label=name, description=desc[:100]))
+            elif isinstance(raw_types, dict):
+                for name, data in raw_types.items():
+                    desc = data.get("description", "") if isinstance(data, dict) else ""
+                    options.append(discord.SelectOption(label=name, description=desc[:100]))
+
+        if not options:
+            options.append(discord.SelectOption(label="تقديم عام", description="التقديم الافتراضي للبوت"))
 
         super().__init__(
             placeholder="اختر نوع التقديم",
@@ -612,7 +606,7 @@ class ApplicationMenu(discord.ui.Select):
             )
         )
 
-class ApplicationMenuView(discord.ui.View):
+class ApplicationSelectView(discord.ui.View):
     def __init__(self, guild_id):
         super().__init__(timeout=None)
         self.add_item(ApplicationMenu(guild_id))
@@ -659,7 +653,7 @@ async def application_panel(
 
     msg = await channel.send(
         embed=embed,
-        view=ApplicationMenuView(interaction.guild.id)
+        view=ApplicationSelectView(interaction.guild.id)
     )
 
     persistent_panels.append({
@@ -675,112 +669,110 @@ async def application_panel(
         ephemeral=True
     )
 
-@bot.tree.command(name="application-update-panel", description="تحديث بانل التقديم الحالي")
+@bot.tree.command(name="application-add-type", description="إضافة نوع تقديم جديد وتحديث البانل تلقائياً")
 @app_commands.checks.has_permissions(administrator=True)
-async def application_update_panel(
+async def application_add_type(
     interaction: discord.Interaction,
-    title: str,
-    description: str,
-    button_name: str,
-    button_emoji: str,
-    image: str = None
+    name: str,
+    description: str = "بدون وصف"
 ):
     gid = str(interaction.guild.id)
 
-    if gid not in application_config:
-        await interaction.response.send_message(
-            "❌ لا يوجد بانل تقديم معد مسبقاً.",
-            ephemeral=True
-        )
-        return
+    if gid not in application_types:
+        application_types[gid] = []
 
-    config = application_config[gid]
+    if isinstance(application_types[gid], dict):
+        converted_list = []
+        for k, v in application_types[gid].items():
+            desc = v.get("description", "بدون وصف") if isinstance(v, dict) else "بدون وصف"
+            converted_list.append({"name": k, "description": desc, "enabled": True})
+        application_types[gid] = converted_list
 
-    channel_id = config.get("panel_channel") or config.get("channel")
-    old_message_id = None
+    for app_type in application_types[gid]:
+        if app_type["name"] == name:
+            await interaction.response.send_message(
+                "❌ هذا النوع موجود مسبقاً.",
+                ephemeral=True
+            )
+            return
+
+    application_types[gid].append({
+        "name": name,
+        "description": description,
+        "enabled": True
+    })
+
+    save_application_types()
+
+    updated = 0
 
     for panel in persistent_panels:
-        if panel.get("type") == "application" and str(panel.get("guild_id")) == gid:
-            old_message_id = panel.get("message_id")
-            break
+        if panel.get("type") != "application":
+            continue
 
-    if not old_message_id:
-        await interaction.response.send_message(
-            "❌ لم يتم العثور على رسالة البانل.",
-            ephemeral=True
-        )
-        return
+        if str(panel.get("guild_id")) != gid:
+            continue
 
-    channel = interaction.guild.get_channel(channel_id)
-
-    if not channel:
-        await interaction.response.send_message(
-            "❌ روم البانل غير موجود.",
-            ephemeral=True
-        )
-        return
-
-    try:
-        msg = await channel.fetch_message(old_message_id)
-
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=discord.Color.blurple()
-        )
-
-        if image:
-            embed.set_image(url=image)
-
-        await msg.edit(
-            embed=embed,
-            view=ApplicationButtonView(
-                interaction.guild.id,
-                button_name,
-                button_emoji
+        try:
+            channel = interaction.guild.get_channel(
+                panel["channel_id"]
             )
-        )
 
-        # حفظ التحديثات
-        application_config[gid]["title"] = title
-        application_config[gid]["description"] = description
-        application_config[gid]["button_name"] = button_name
-        application_config[gid]["button_emoji"] = button_emoji
-        application_config[gid]["image"] = image
+            if not channel:
+                continue
 
-        save_all_applications()
+            message = await channel.fetch_message(
+                panel["message_id"]
+            )
 
-        await interaction.response.send_message(
-            "✅ تم تحديث بانل التقديم بنجاح.",
-            ephemeral=True
-        )
+            cfg = application_config.get(gid, {})
 
-    except Exception as e:
-        await interaction.response.send_message(
-            f"❌ حدث خطأ: {e}",
-            ephemeral=True
-        )
+            embed = discord.Embed(
+                title=cfg.get("title", "📋 التقديم"),
+                description=cfg.get("description", "اختر نوع التقديم"),
+                color=discord.Color.blurple()
+            )
 
-@bot.tree.command(name="application-add-type", description="إضافة نوع تقديم جديد")
-@app_commands.checks.has_permissions(administrator=True)
-async def application_add_type(interaction: discord.Interaction, name: str, description: str = "بدون وصف"):
-    gid = str(interaction.guild.id)
-    if gid not in application_types: 
-        application_types[gid] = {}
-    application_types[gid][name] = {"description": description}
-    save_all_applications()
-    await interaction.response.send_message(f"✅ تم إضافة نوع التقديم: `{name}`", ephemeral=True)
+            if cfg.get("image"):
+                embed.set_image(url=cfg["image"])
+
+            await message.edit(
+                embed=embed,
+                view=ApplicationSelectView(gid)
+            )
+
+            updated += 1
+
+        except Exception as e:
+            print(f"Panel update error: {e}")
+
+    await interaction.response.send_message(
+        f"✅ تمت إضافة نوع التقديم: `{name}`\n"
+        f"🔄 تم تحديث {updated} بانل تلقائياً.",
+        ephemeral=True
+    )
 
 @bot.tree.command(name="application-remove-type", description="حذف نوع تقديم")
 @app_commands.checks.has_permissions(administrator=True)
 async def application_remove_type(interaction: discord.Interaction, name: str):
     gid = str(interaction.guild.id)
-    if name in application_types.get(gid, {}):
-        del application_types[gid][name]
-        save_all_applications()
-        await interaction.response.send_message("✅ تم حذف النوع.", ephemeral=True)
-    else:
-        await interaction.response.send_message("❌ النوع غير موجود.", ephemeral=True)
+    types = application_types.get(gid, [])
+    
+    if isinstance(types, dict):
+        if name in types:
+            del types[name]
+            save_all_applications()
+            await interaction.response.send_message("✅ تم حذف النوع.", ephemeral=True)
+            return
+    elif isinstance(types, list):
+        for i, t in enumerate(types):
+            if isinstance(t, dict) and t.get("name") == name:
+                types.pop(i)
+                save_all_applications()
+                await interaction.response.send_message("✅ تم حذف النوع.", ephemeral=True)
+                return
+
+    await interaction.response.send_message("❌ النوع غير موجود.", ephemeral=True)
 
 @bot.tree.command(name="application-set-questions", description="تحديد أسئلة نوع تقديم")
 @app_commands.checks.has_permissions(administrator=True)
@@ -810,17 +802,6 @@ async def application_set_role(interaction: discord.Interaction, role: discord.R
     application_config[gid]["accepted_role"] = role.id
     save_all_applications()
     await interaction.response.send_message(f"✅ سيتم إعطاء رتبة {role.mention} للمقبولين تلقائياً", ephemeral=True)
-
-@bot.tree.command(name="application-button", description="تغيير اسم الزر والإيموجي")
-@app_commands.checks.has_permissions(administrator=True)
-async def application_button(interaction: discord.Interaction, button_name: str, emoji: str):
-    gid = str(interaction.guild.id)
-    if gid not in application_config: 
-        application_config[gid] = {}
-    application_config[gid]["button_name"] = button_name
-    application_config[gid]["button_emoji"] = emoji
-    save_all_applications()
-    await interaction.response.send_message("✅ تم تعديل زر التقديم.", ephemeral=True)
 
 @bot.tree.command(name="application-description", description="تعديل وصف بانل التقديم")
 @app_commands.checks.has_permissions(administrator=True)
@@ -1272,7 +1253,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="🛡️ الإدارة", value="/ban, /kick, /mute, /warn, /clear, /lock, /unlock, /say, /embed", inline=False)
     embed.add_field(name="👑 إدارة الرتب والأعضاء", value="/addrole, /removerole, /createrole, /roleall, /nickname, /dm, /announce", inline=False)
     embed.add_field(name="📊 المعلومات", value="/avatar, /userinfo, /serverinfo, /ping", inline=False)
-    embed.add_field(name="📝 التقديمات والترحيب", value="/application-panel, /application-update-panel, /application-add-type, /application-remove-type, /application-set-questions, /set-welcome, /member-count-setup", inline=False)
+    embed.add_field(name="📝 التقديمات والترحيب", value="/application-panel, /application-add-type, /application-remove-type, /application-set-questions, /set-welcome, /member-count-setup", inline=False)
     embed.add_field(name="🛡️ الحماية", value="/anti-links, /anti-invite, /badword-add", inline=False)
     await interaction.response.send_message(embed=embed)
 
@@ -1287,7 +1268,7 @@ async def on_ready():
         try:
             ptype = panel.get("type")
             if ptype == "application":
-                bot.add_view(ApplicationMenuView(panel["guild_id"]), message_id=panel["message_id"])
+                bot.add_view(ApplicationSelectView(panel["guild_id"]), message_id=panel["message_id"])
             elif ptype == "reaction_role":
                 bot.add_view(ReactionRoleView(panel["role_id"]), message_id=panel["message_id"])
         except Exception as e:
