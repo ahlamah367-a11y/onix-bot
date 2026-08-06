@@ -541,7 +541,6 @@ class DynamicApplicationModal(discord.ui.Modal):
                 for i, ans in enumerate(answers):
                     embed.add_field(name=f"السؤال {i+1}", value=ans, inline=False)
                 msg = await channel.send(embed=embed, view=ApplicationDecisionView(interaction.user.id, app_id, channel.id, 0))
-                # تحديث الـ ID الخاص بالرسالة للزر
                 view = ApplicationDecisionView(interaction.user.id, app_id, channel.id, msg.id)
                 await msg.edit(view=view)
 
@@ -552,7 +551,6 @@ class ApplicationButtonView(discord.ui.View):
         super().__init__(timeout=None)
         self.guild_id = guild_id
         
-        # إنشاء الزر كـ Button عادٍ وإضافته بطريقة صحيحة ودعم الـ custom_id الديناميكي
         btn = discord.ui.Button(label=button_text, emoji=button_emoji, style=discord.ButtonStyle.green, custom_id=f"open_app_{guild_id}")
         btn.callback = self.button_callback
         self.add_item(btn)
@@ -693,6 +691,128 @@ async def clear(interaction: discord.Interaction, amount: int):
     await interaction.followup.send(f"✅ تم حذف {len(deleted)} رسالة.", ephemeral=True)
 
 # ==================================
+# الجزء الثالث - الإدارة المتقدمة
+# ==================================
+
+@bot.tree.command(name="nickname", description="تغيير اسم عضو")
+@app_commands.checks.has_permissions(manage_nicknames=True)
+async def nickname(interaction: discord.Interaction, member: discord.Member, name: str):
+    try:
+        await member.edit(nick=name)
+        await interaction.response.send_message(
+            f"✅ تم تغيير اسم {member.mention} إلى `{name}`"
+        )
+    except:
+        await interaction.response.send_message(
+            "❌ لا أستطيع تغيير الاسم",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="addrole", description="إعطاء رتبة لعضو")
+@app_commands.checks.has_permissions(manage_roles=True)
+async def addrole(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    try:
+        await member.add_roles(role)
+        await interaction.response.send_message(
+            f"✅ تم إعطاء {member.mention} رتبة {role.mention}"
+        )
+    except:
+        await interaction.response.send_message(
+            "❌ لا أستطيع إعطاء هذه الرتبة",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="removerole", description="إزالة رتبة من عضو")
+@app_commands.checks.has_permissions(manage_roles=True)
+async def removerole(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
+    try:
+        await member.remove_roles(role)
+        await interaction.response.send_message(
+            f"❌ تم إزالة رتبة {role.mention} من {member.mention}"
+        )
+    except:
+        await interaction.response.send_message(
+            "❌ لا أستطيع إزالة هذه الرتبة",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="createrole", description="إنشاء رتبة جديدة")
+@app_commands.checks.has_permissions(manage_roles=True)
+async def createrole(interaction: discord.Interaction, name: str):
+    role = await interaction.guild.create_role(name=name)
+    await interaction.response.send_message(
+        f"✅ تم إنشاء الرتبة {role.mention}"
+    )
+
+@bot.tree.command(name="roleall", description="إعطاء رتبة لكل أعضاء السيرفر")
+@app_commands.checks.has_permissions(administrator=True)
+async def roleall(interaction: discord.Interaction, role: discord.Role):
+    await interaction.response.defer(ephemeral=True)
+
+    count = 0
+    for member in interaction.guild.members:
+        if not member.bot:
+            try:
+                await member.add_roles(role)
+                count += 1
+            except:
+                pass
+
+    await interaction.followup.send(
+        f"✅ تم إعطاء الرتبة {role.mention} لـ {count} عضو"
+    )
+
+@bot.tree.command(name="dm", description="إرسال رسالة خاصة لعضو")
+@app_commands.checks.has_permissions(administrator=True)
+async def dm(interaction: discord.Interaction, member: discord.Member, message: str):
+    try:
+        await member.send(message)
+        await interaction.response.send_message("✅ تم إرسال الرسالة", ephemeral=True)
+    except:
+        await interaction.response.send_message(
+            "❌ لا يمكن إرسال رسالة لهذا العضو",
+            ephemeral=True
+        )
+
+@bot.tree.command(name="announce", description="إرسال إعلان Embed")
+@app_commands.checks.has_permissions(administrator=True)
+async def announce(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+    title: str,
+    description: str
+):
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blue(),
+        timestamp=datetime.utcnow()
+    )
+
+    embed.set_footer(text=f"إعلان بواسطة {interaction.user}")
+
+    await channel.send(embed=embed)
+
+    await interaction.response.send_message(
+        "✅ تم إرسال الإعلان",
+        ephemeral=True
+    )
+
+@bot.tree.command(name="clearwarns", description="مسح تحذيرات عضو")
+@app_commands.checks.has_permissions(administrator=True)
+async def clearwarns(interaction: discord.Interaction, member: discord.Member):
+    warnings = load_json(WARNINGS_FILE, {})
+    gid = str(interaction.guild.id)
+
+    if gid in warnings and str(member.id) in warnings[gid]:
+        del warnings[gid][str(member.id)]
+        save_json(WARNINGS_FILE, warnings)
+
+    await interaction.response.send_message(
+        "✅ تم مسح التحذيرات"
+    )
+
+# ==================================
 # أوامر إدارة الرومات (Channels)
 # ==================================
 
@@ -730,24 +850,6 @@ async def unhide(interaction: discord.Interaction):
 # نظام الاقتراحات (Suggestions)
 # ==================================
 
-class SuggestionView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="قبول", style=discord.ButtonStyle.green, custom_id="sug_accept")
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.green()
-        await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("تم قبول الاقتراح ✅", ephemeral=True)
-
-    @discord.ui.button(label="رفض", style=discord.ButtonStyle.red, custom_id="sug_reject")
-    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = interaction.message.embeds[0]
-        embed.color = discord.Color.red()
-        await interaction.message.edit(embed=embed, view=None)
-        await interaction.response.send_message("تم رفض الاقتراح ❌", ephemeral=True)
-
 @bot.tree.command(name="suggestion-setup", description="إعداد روم الاقتراحات")
 @app_commands.checks.has_permissions(administrator=True)
 async def suggestion_setup(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -756,6 +858,7 @@ async def suggestion_setup(interaction: discord.Interaction, channel: discord.Te
     await interaction.response.send_message(f"✅ تم تعيين روم الاقتراحات {channel.mention}", ephemeral=True)
 
 @bot.tree.command(name="suggest", description="إرسال اقتراح")
+@app_commands.checks.has_permissions(manage_messages=True)
 async def suggest(interaction: discord.Interaction, suggestion: str):
     channel_id = suggestion_config.get(str(interaction.guild.id))
     if not channel_id:
@@ -767,7 +870,11 @@ async def suggest(interaction: discord.Interaction, suggestion: str):
         return
     embed = discord.Embed(title="💡 اقتراح جديد", description=suggestion, color=discord.Color.blue(), timestamp=datetime.utcnow())
     embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
-    await channel.send(embed=embed, view=SuggestionView())
+    
+    msg = await channel.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❌")
+    
     await interaction.response.send_message("✅ تم إرسال اقتراحك", ephemeral=True)
 
 # ==================================
@@ -801,17 +908,117 @@ async def badword_add(interaction: discord.Interaction, word: str):
     await interaction.response.send_message(f"✅ تمت إضافة الكلمة `{word}`", ephemeral=True)
 
 # ==================================
-# أوامر المعلومات والمساعدة
+# أوامر المعلومات (Information)
+# ==================================
+
+@bot.tree.command(name="avatar", description="عرض صورة العضو")
+async def avatar(interaction: discord.Interaction, member: discord.Member = None):
+    member = member or interaction.user
+    embed = discord.Embed(
+        title=f"🖼️ صورة {member.name}",
+        color=discord.Color.blue()
+    )
+    embed.set_image(url=member.display_avatar.url)
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="userinfo", description="عرض معلومات العضو")
+async def userinfo(interaction: discord.Interaction, member: discord.Member = None):
+    member = member or interaction.user
+    embed = discord.Embed(
+        title=f"👤 معلومات {member}",
+        color=discord.Color.blurple()
+    )
+    embed.add_field(
+        name="🆔 ID",
+        value=member.id,
+        inline=False
+    )
+    embed.add_field(
+        name="📅 دخل السيرفر",
+        value=member.joined_at.strftime("%Y-%m-%d") if member.joined_at else "غير معروف",
+        inline=False
+    )
+    embed.add_field(
+        name="🎭 الرتب",
+        value=" ".join([r.mention for r in member.roles[1:]]) or "لا يوجد",
+        inline=False
+    )
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="serverinfo", description="عرض معلومات السيرفر")
+async def serverinfo(interaction: discord.Interaction):
+    guild = interaction.guild
+    embed = discord.Embed(
+        title=f"🏠 معلومات {guild.name}",
+        color=discord.Color.green()
+    )
+    embed.add_field(
+        name="👥 الأعضاء",
+        value=guild.member_count
+    )
+    embed.add_field(
+        name="📁 الرومات",
+        value=len(guild.channels)
+    )
+    embed.add_field(
+        name="🎭 الرتب",
+        value=len(guild.roles)
+    )
+    embed.set_thumbnail(
+        url=guild.icon.url if guild.icon else None
+    )
+    await interaction.response.send_message(embed=embed)
+
+# ==================================
+# أوامر الرسائل (Say & Embed)
+# ==================================
+
+@bot.tree.command(name="say", description="جعل البوت يرسل رسالة")
+@app_commands.checks.has_permissions(administrator=True)
+async def say(interaction: discord.Interaction, message: str):
+    await interaction.response.send_message(
+        "✅ تم الإرسال",
+        ephemeral=True
+    )
+    await interaction.channel.send(message)
+
+@bot.tree.command(name="embed", description="إرسال رسالة Embed من البوت")
+@app_commands.checks.has_permissions(administrator=True)
+async def embed_command(
+    interaction: discord.Interaction,
+    title: str,
+    description: str
+):
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=discord.Color.blue(),
+        timestamp=datetime.utcnow()
+    )
+    await interaction.response.send_message(
+        "✅ تم إرسال الـ Embed",
+        ephemeral=True
+    )
+    await interaction.channel.send(embed=embed)
+
+# ==================================
+# أوامر المعلومات والمساعدة (الأصلية)
 # ==================================
 
 @bot.tree.command(name="ping", description="سرعة استجابة البوت")
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"🏓 Pong! `{round(bot.latency * 1000)}ms`")
+    latency = round(bot.latency * 1000)
+    await interaction.response.send_message(f"🏓 Pong! `{latency}ms`")
 
 @bot.tree.command(name="help", description="عرض قائمة الأوامر")
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(title="🤖 أوامر البوت", description="قائمة الأوامر المتاحة", color=discord.Color.blurple())
-    embed.add_field(name="🛡️ الإدارة", value="/ban, /kick, /mute, /warn, /clear, /lock, /unlock", inline=False)
+    embed.add_field(name="🛡️ الإدارة", value="/ban, /kick, /mute, /warn, /clear, /lock, /unlock, /say, /embed", inline=False)
+    embed.add_field(name="👑 إدارة الرتب والأعضاء", value="/addrole, /removerole, /createrole, /roleall, /nickname, /dm, /announce", inline=False)
+    embed.add_field(name="📊 المعلومات", value="/avatar, /userinfo, /serverinfo, /ping", inline=False)
     embed.add_field(name="📝 التقديمات والترحيب", value="/application-setup, /set-welcome, /member-count-setup", inline=False)
     embed.add_field(name="🛡️ الحماية", value="/anti-links, /anti-invite, /badword-add", inline=False)
     await interaction.response.send_message(embed=embed)
