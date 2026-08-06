@@ -807,7 +807,7 @@ class ReactionRoleView(discord.ui.View):
 @app_commands.checks.has_permissions(administrator=True)
 async def reaction_role(interaction: discord.Interaction, role: discord.Role, channel: discord.TextChannel, text: str, member: discord.Member = None):
     embed = discord.Embed(title="🎭 رتبة تلقائية", description=text, color=discord.Color.blue())
-    embed.add_field(name="الأزرار المتاحة:", value=f"احصل على {role.mention} أو قم بإزالتها عبر الأزرار أدناه.")
+    embed.add_field(name="الرتبة:", value=f" {role.mention}.")
 
     content = member.mention if member else None
 
