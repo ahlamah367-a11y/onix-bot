@@ -757,35 +757,57 @@ class ReactionRoleView(discord.ui.View):
     def __init__(self, role_id: int):
         super().__init__(timeout=None)
         self.role_id = role_id
-        button = discord.ui.Button(
-            label="🎭 أخذ / إزالة الرتبة",
-            style=discord.ButtonStyle.primary,
-            custom_id=f"reaction_role_btn_{role_id}"
-        )
-        button.callback = self.role_button
-        self.add_item(button)
 
-    async def role_button(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-
+    @discord.ui.button(
+        label="✅ أخذ الرتبة",
+        style=discord.ButtonStyle.green,
+        custom_id="take_role"
+    )
+    async def take_role(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(self.role_id)
+
         if not role:
-            await interaction.followup.send("❌ الرتبة غير موجودة في السيرفر", ephemeral=True)
+            await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
             return
 
         if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
-            await interaction.followup.send(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
-        else:
+            await interaction.response.send_message("⚠️ لديك هذه الرتبة بالفعل", ephemeral=True)
+            return
+
+        try:
             await interaction.user.add_roles(role)
-            await interaction.followup.send(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+            await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
+
+    @discord.ui.button(
+        label="❌ إزالة الرتبة",
+        style=discord.ButtonStyle.red,
+        custom_id="remove_role"
+    )
+    async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(self.role_id)
+
+        if not role:
+            await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
+            return
+
+        if role not in interaction.user.roles:
+            await interaction.response.send_message("⚠️ أنت لا تملك هذه الرتبة", ephemeral=True)
+            return
+
+        try:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention} منك", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ حدث خطأ: {e}", ephemeral=True)
 
 @bot.tree.command(name="reaction-role", description="إنشاء زر للحصول على رتبة")
 @app_commands.describe(role="الرتبة", channel="الروم", text="النص الذي سيظهر", member="عضو محدد (اختياري)")
 @app_commands.checks.has_permissions(administrator=True)
 async def reaction_role(interaction: discord.Interaction, role: discord.Role, channel: discord.TextChannel, text: str, member: discord.Member = None):
     embed = discord.Embed(title="🎭 رتبة تلقائية", description=text, color=discord.Color.blue())
-    embed.add_field(name="اضغط الزر للحصول على:", value=role.mention)
+    embed.add_field(name="الأزرار المتاحة:", value=f"احصل على {role.mention} أو قم بإزالتها عبر الأزرار أدناه.")
 
     content = member.mention if member else None
 
