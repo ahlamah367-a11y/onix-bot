@@ -1,9 +1,27 @@
+import os
+from flask import Flask
+import threading
+
+# --- إعداد خادم الويب الوهمي لإرضاء منصة Render ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+# تشغيل السيرفر في خلفية البوت
+threading.Thread(target=run_flask, daemon=True).start()
+# ---------------------------------------------
+
 import discord
 from discord.ext import commands
 from discord import app_commands
 
 import json
-import os
 from datetime import datetime, timedelta
 import asyncio
 import random
