@@ -530,6 +530,33 @@ class ApplicationDecisionView(discord.ui.View):
         if member:
             await send_application_result(member, accepted, reason, interaction.guild)
 
+        # تحديث رسالة التقديم
+        try:
+            message = interaction.message
+            embed = message.embeds[0]
+
+            if accepted:
+                embed.title = "✅ تم قبول التقديم"
+                embed.color = discord.Color.green()
+                embed.add_field(
+                    name="الحالة",
+                    value=f"مقبول بواسطة {interaction.user.mention}",
+                    inline=False
+                )
+            else:
+                embed.title = "❌ تم رفض التقديم"
+                embed.color = discord.Color.red()
+                embed.add_field(
+                    name="الحالة",
+                    value=f"مرفوض بواسطة {interaction.user.mention}",
+                    inline=False
+                )
+
+            await message.edit(embed=embed, view=None)
+
+        except Exception as e:
+            print("Embed Update Error:", e)
+
         try:
             await interaction.response.send_message("✅ تم تنفيذ القرار", ephemeral=True)
         except discord.InteractionResponded:
@@ -569,6 +596,26 @@ class RejectReasonModal(discord.ui.Modal, title="سبب رفض التقديم"):
 
         if member:
             await send_application_result(member, False, self.reason_input.value, interaction.guild)
+
+        # تحديث رسالة التقديم عند الرفض بالموعد
+        try:
+            message = interaction.message
+            embed = message.embeds[0]
+            embed.title = "❌ تم رفض التقديم"
+            embed.color = discord.Color.red()
+            embed.add_field(
+                name="الحالة",
+                value=f"مرفوض بواسطة {interaction.user.mention}",
+                inline=False
+            )
+            embed.add_field(
+                name="السبب",
+                value=self.reason_input.value,
+                inline=False
+            )
+            await message.edit(embed=embed, view=None)
+        except Exception as e:
+            print("Embed Update Error:", e)
 
         await interaction.response.send_message("❌ تم رفض الطلب وإرسال السبب للعضو", ephemeral=True)
 
@@ -629,7 +676,6 @@ class DynamicApplicationModal(discord.ui.Modal):
                 view = ApplicationDecisionView(interaction.user.id, app_id)
                 msg = await channel.send(embed=embed, view=view)
                 
-                # حفظ الـ Decision View بنظام الـ Persistent
                 persistent_panels.append({
                     "type": "application_decision",
                     "guild_id": interaction.guild.id,
@@ -691,7 +737,6 @@ class ApplicationButtonView(discord.ui.View):
                 return
             await interaction.response.send_modal(DynamicApplicationModal(self.guild_id, app_type))
 
-# أوامر إدارة التقديمات
 @bot.tree.command(name="application-setup", description="إنشاء بانل التقديم")
 @app_commands.checks.has_permissions(administrator=True)
 async def application_setup(
@@ -722,7 +767,6 @@ async def application_setup(
     view = ApplicationButtonView(interaction.guild.id, button_text, button_emoji)
     msg = await panel_channel.send(embed=embed, view=view)
 
-    # حفظ البانل بنظام الـ Persistent
     persistent_panels.append({
         "type": "application",
         "guild_id": interaction.guild.id,
@@ -959,7 +1003,6 @@ async def reaction_role(interaction: discord.Interaction, role: discord.Role, ch
     reaction_roles[str(msg.id)] = {"role_id": role.id, "channel_id": channel.id, "guild_id": interaction.guild.id}
     save_json(REACTION_ROLES_FILE, reaction_roles)
 
-    # حفظ نظام الـ Persistent للـ Reaction Role
     persistent_panels.append({
         "type": "reaction_role",
         "guild_id": interaction.guild.id,
@@ -984,7 +1027,6 @@ async def on_ready():
     print(f"🌐 Servers : {len(bot.guilds)}")
     print("="*40)
 
-    # إعادة تحميل كل الـ Persistent Views المحفوظة بملف persistent_panels.json
     for panel in persistent_panels:
         try:
             ptype = panel.get("type")
