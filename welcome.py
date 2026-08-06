@@ -965,28 +965,108 @@ class ReactionRoleView(discord.ui.View):
         super().__init__(timeout=None)
         self.role_id = role_id
 
-    @discord.ui.button(label="✅ أخذ/إزالة الرتبة", style=discord.ButtonStyle.green, custom_id="toggle_role_btn")
-    async def toggle_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="✅ أخذ الرتبة",
+        style=discord.ButtonStyle.green,
+        custom_id="take_role_btn"
+    )
+    async def take_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+
         role = interaction.guild.get_role(self.role_id)
+
         if not role:
-            await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ الرتبة غير موجودة",
+                ephemeral=True
+            )
             return
+
         if role in interaction.user.roles:
-            await interaction.user.remove_roles(role)
-            await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention} منك", ephemeral=True)
+            await interaction.response.send_message(
+                "⚠️ أنت تملك هذه الرتبة بالفعل",
+                ephemeral=True
+            )
+            return
+
+        await interaction.user.add_roles(role)
+
+        await interaction.response.send_message(
+            f"✅ تم إعطاؤك رتبة {role.mention}",
+            ephemeral=True
+        )
+
+
+    @discord.ui.button(
+        label="❌ إزالة الرتبة",
+        style=discord.ButtonStyle.red,
+        custom_id="remove_role_btn"
+    )
+    async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if not role:
+            await interaction.response.send_message(
+                "❌ الرتبة غير موجودة",
+                ephemeral=True
+            )
+            return
+
+        if role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "⚠️ أنت لا تملك هذه الرتبة",
+                ephemeral=True
+            )
+            return
+
+        await interaction.user.remove_roles(role)
+
+        await interaction.response.send_message(
+            f"❌ تم إزالة رتبة {role.mention}",
+            ephemeral=True
+        )
+
+
+    @discord.ui.button(
+        label="👥 عرض الأعضاء",
+        style=discord.ButtonStyle.blurple,
+        custom_id="show_role_members_btn"
+    )
+    async def show_members(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if not role:
+            await interaction.response.send_message(
+                "❌ الرتبة غير موجودة",
+                ephemeral=True
+            )
+            return
+
+
+        members = role.members
+
+        if not members:
+            text = "لا يوجد أحد يملك هذه الرتبة."
         else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+            text = "\n".join(
+                [f"• {member.mention}" for member in members[:50]]
+            )
 
-@bot.tree.command(name="reaction-role", description="إنشاء زر للحصول على رتبة")
-@app_commands.checks.has_permissions(administrator=True)
-async def reaction_role(interaction: discord.Interaction, role: discord.Role, channel: discord.TextChannel, text: str):
-    embed = discord.Embed(title="🎭 رتبة تلقائية", description=text, color=discord.Color.blue())
-    msg = await channel.send(embed=embed, view=ReactionRoleView(role.id))
-    persistent_panels.append({"type": "reaction_role", "guild_id": interaction.guild.id, "channel_id": channel.id, "message_id": msg.id, "role_id": role.id})
-    save_persistent()
-    await interaction.response.send_message("✅ تم إنشاء زر الرتبة بنجاح", ephemeral=True)
+            if len(members) > 50:
+                text += f"\n\nو {len(members)-50} أعضاء آخرين..."
 
+
+        embed = discord.Embed(
+            title=f"👥 أعضاء رتبة {role.name}",
+            description=text,
+            color=discord.Color.blue()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
 # ==================================
 # أوامر الإدارة والعقوبات (Moderation)
 # ==================================
