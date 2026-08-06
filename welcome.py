@@ -178,7 +178,7 @@ async def set_logs(interaction: discord.Interaction, channel: discord.TextChanne
 # ==================================
 
 def has_mod_permission(member):
-    if member.guild_permissions.administrator:
+    if member.guild_permissions.administrator or member.guild_permissions.manage_messages:
         return True
     role_id = mod_roles.get(str(member.guild.id))
     if role_id:
@@ -261,11 +261,15 @@ async def on_member_remove(member):
     await send_log(member.guild, "📤 خروج عضو", f"العضو: {member.mention} (`{member.id}`)", discord.Color.dark_red())
 
 # ==================================
-# فحص الحماية المتقدم (Anti Check)
+# فحص الحماية المتقدم (Anti Check) - مع استثناء الإداريين
 # ==================================
 
 async def anti_check(message):
     if not message.guild or message.author.bot:
+        return
+
+    # استثناء المشرفين والإداريين ومن يمتلكون رتب صالحة للمنشن والسبام
+    if has_mod_permission(message.author):
         return
 
     config = anti_config.get(str(message.guild.id), {})
@@ -361,27 +365,25 @@ async def on_message(message):
 
     prot = protection_config.get(guild_id, {})
     
-    if prot.get("anti_links") or prot.get("links"):
+    if (prot.get("anti_links") or prot.get("links")) and not has_mod_permission(message.author):
         if re.findall(r"https?://\S+", content):
-            if not has_mod_permission(message.author):
-                try:
-                    await message.delete()
-                    await message.author.timeout(timedelta(minutes=2), reason="إرسال رابط ممنوع")
-                    await send_log(message.guild, "🔗 رابط ممنوع", f"العضو: {message.author.mention}", discord.Color.red())
-                except:
-                    pass
-                return
+            try:
+                await message.delete()
+                await message.author.timeout(timedelta(minutes=2), reason="إرسال رابط ممنوع")
+                await send_log(message.guild, "🔗 رابط ممنوع", f"العضو: {message.author.mention}", discord.Color.red())
+            except:
+                pass
+            return
 
-    if prot.get("anti_invite") or prot.get("invites"):
+    if (prot.get("anti_invite") or prot.get("invites")) and not has_mod_permission(message.author):
         if "discord.gg/" in content or "discord.com/invite/" in content:
-            if not has_mod_permission(message.author):
-                try:
-                    await message.delete()
-                    await message.author.timeout(timedelta(minutes=5), reason="إرسال دعوة ديسكورد")
-                    await send_log(message.guild, "🚫 دعوة سيرفر ممنوعة", f"العضو: {message.author.mention}", discord.Color.dark_red())
-                except:
-                    pass
-                return
+            try:
+                await message.delete()
+                await message.author.timeout(timedelta(minutes=5), reason="إرسال دعوة ديسكورد")
+                await send_log(message.guild, "🚫 دعوة سيرفر ممنوعة", f"العضو: {message.author.mention}", discord.Color.dark_red())
+            except:
+                pass
+            return
 
     uid = str(message.author.id)
     if guild_id not in xp_data:
@@ -398,20 +400,22 @@ async def on_message(message):
         await message.channel.send(f"🎉 مبروك {message.author.mention} وصلت للمستوى `{current_level + 1}`!")
     save_json(XP_FILE, xp_data)
 
-    user_id = message.author.id
-    now = time.time()
-    if user_id not in user_message_timestamps:
-        user_message_timestamps[user_id] = []
-    user_message_timestamps[user_id] = [t for t in user_message_timestamps[user_id] if now - t < 5]
-    user_message_timestamps[user_id].append(now)
-
-    if len(user_message_timestamps[user_id]) >= 8:
-        try:
-            await message.author.timeout(timedelta(minutes=2), reason="Anti-Spam")
-            await message.channel.send(f"⚠️ {message.author.mention} تم إعطاؤك تايم أوت بسبب السبام!", delete_after=5)
+    # استثناء الإداريين من نظام منع السبام العادي (Spam Messages)
+    if not has_mod_permission(message.author):
+        user_id = message.author.id
+        now = time.time()
+        if user_id not in user_message_timestamps:
             user_message_timestamps[user_id] = []
-        except:
-            pass
+        user_message_timestamps[user_id] = [t for t in user_message_timestamps[user_id] if now - t < 5]
+        user_message_timestamps[user_id].append(now)
+
+        if len(user_message_timestamps[user_id]) >= 8:
+            try:
+                await message.author.timeout(timedelta(minutes=2), reason="Anti-Spam")
+                await message.channel.send(f"⚠️ {message.author.mention} تم إعطاؤك تايم أوت بسبب السبام!", delete_after=5)
+                user_message_timestamps[user_id] = []
+            except:
+                pass
 
     await bot.process_commands(message)
 
@@ -530,7 +534,6 @@ class ApplicationDecisionView(discord.ui.View):
         if member:
             await send_application_result(member, accepted, reason, interaction.guild)
 
-        # تحديث رسالة التقديم
         try:
             message = interaction.message
             embed = message.embeds[0]
@@ -597,7 +600,6 @@ class RejectReasonModal(discord.ui.Modal, title="سبب رفض التقديم"):
         if member:
             await send_application_result(member, False, self.reason_input.value, interaction.guild)
 
-        # تحديث رسالة التقديم عند الرفض بالموعد
         try:
             message = interaction.message
             embed = message.embeds[0]
@@ -829,7 +831,7 @@ async def anti_setup(interaction: discord.Interaction):
         "badwords": True
     }
     save_json(ANTI_CONFIG_FILE, anti_config)
-    await interaction.response.send_message("✅ تم تشغيل أنظمة الحماية", ephemeral=True)
+    await interaction.response.send_message("✅ تم تشغيل أنظمة الحماية واستثناء الإداريين تلقائياً", ephemeral=True)
 
 @bot.tree.command(name="announce", description="إرسال إعلان Embed")
 @app_commands.describe(channel="الروم", title="العنوان", text="النص")
@@ -847,15 +849,16 @@ async def say(interaction: discord.Interaction, text: str):
     await interaction.channel.send(text)
     await interaction.response.send_message("✅ تم الإرسال", ephemeral=True)
 
-@bot.tree.command(name="set-welcome", description="تحديد روم وإعداد رسالة الترحيب")
-@app_commands.describe(channel="روم الترحيب", message="رسالة الترحيب")
+@bot.tree.command(name="set-welcome", description="تحديد روم وإعداد رسالة الترحيب التلقائية")
+@app_commands.describe(channel="روم الترحيب", message="رسالة الترحيب (استخدم {user} لإشارة العضو)")
+@app_commands.checks.has_permissions(administrator=True)
 async def set_welcome(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ هذا الأمر للمشرفين فقط", ephemeral=True)
-        return
-    welcome_config[str(interaction.guild.id)] = {"channel_id": channel.id, "message": message}
+    welcome_config[str(interaction.guild.id)] = {
+        "channel_id": channel.id,
+        "message": message
+    }
     save_json(WELCOME_CONFIG_FILE, welcome_config)
-    await interaction.response.send_message(f"✅ تم ضبط نظام الترحيب في {channel.mention}!", ephemeral=True)
+    await interaction.response.send_message(f"✅ تم ضبط نظام الترحيب التلقائي بنجاح في {channel.mention}!", ephemeral=True)
 
 @bot.tree.command(name="warn", description="تحذير عضو")
 @app_commands.describe(member="العضو", reason="السبب")
