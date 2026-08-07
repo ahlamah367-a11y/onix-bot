@@ -995,114 +995,6 @@ class ReactionRoleView(discord.ui.View):
             ephemeral=True
         )
 
-
-    @discord.ui.button(
-        label="❌ إزالة الرتبة",
-        style=discord.ButtonStyle.red,
-        custom_id="remove_role_btn"
-    )
-    async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        role = interaction.guild.get_role(self.role_id)
-
-        if not role:
-            await interaction.response.send_message(
-                "❌ الرتبة غير موجودة",
-                ephemeral=True
-            )
-            return
-
-        if role not in interaction.user.roles:
-            await interaction.response.send_message(
-                "⚠️ أنت لا تملك هذه الرتبة",
-                ephemeral=True
-            )
-            return
-
-        await interaction.user.remove_roles(role)
-
-        await interaction.response.send_message(
-            f"❌ تم إزالة رتبة {role.mention}",
-            ephemeral=True
-        )
-
-
-    @discord.ui.button(
-        label="👥 عرض الأعضاء",
-        style=discord.ButtonStyle.blurple,
-        custom_id="show_role_members_btn"
-    )
-    async def show_members(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        role = interaction.guild.get_role(self.role_id)
-
-        if not role:
-            await interaction.response.send_message(
-                "❌ الرتبة غير موجودة",
-                ephemeral=True
-            )
-            return
-
-
-        members = role.members
-
-        if not members:
-            text = "لا يوجد أحد يملك هذه الرتبة."
-        else:
-            text = "\n".join(
-                [f"• {member.mention}" for member in members[:50]]
-            )
-
-            if len(members) > 50:
-                text += f"\n\nو {len(members)-50} أعضاء آخرين..."
-
-
-        embed = discord.Embed(
-            title=f"👥 أعضاء رتبة {role.name}",
-            description=text,
-            color=discord.Color.blue()
-        )
-
-        await interaction.response.send_message(
-# ==================================
-# Reaction Roles System
-# ==================================
-
-class ReactionRoleView(discord.ui.View):
-    def __init__(self, role_id: int):
-        super().__init__(timeout=None)
-        self.role_id = role_id
-
-    @discord.ui.button(
-        label="✅ أخذ الرتبة",
-        style=discord.ButtonStyle.green,
-        custom_id="take_role_btn"
-    )
-    async def take_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        role = interaction.guild.get_role(self.role_id)
-
-        if not role:
-            await interaction.response.send_message(
-                "❌ الرتبة غير موجودة",
-                ephemeral=True
-            )
-            return
-
-        if role in interaction.user.roles:
-            await interaction.response.send_message(
-                "⚠️ أنت تملك هذه الرتبة بالفعل",
-                ephemeral=True
-            )
-            return
-
-        await interaction.user.add_roles(role)
-
-        await interaction.response.send_message(
-            f"✅ تم إعطاؤك رتبة {role.mention}",
-            ephemeral=True
-        )
-
     @discord.ui.button(
         label="❌ إزالة الرتبة",
         style=discord.ButtonStyle.red,
@@ -1171,7 +1063,6 @@ class ReactionRoleView(discord.ui.View):
             embed=embed,
             ephemeral=True
         )
-
 
 # ==================================
 # أمر السلاش
