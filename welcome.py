@@ -1064,10 +1064,104 @@ class ReactionRoleView(discord.ui.View):
         )
 
         await interaction.response.send_message(
-            embed=embed,
+# ==================================
+# Reaction Roles System
+# ==================================
+
+class ReactionRoleView(discord.ui.View):
+    def __init__(self, role_id: int):
+        super().__init__(timeout=None)
+        self.role_id = role_id
+
+    @discord.ui.button(
+        label="✅ أخذ الرتبة",
+        style=discord.ButtonStyle.green,
+        custom_id="take_role_btn"
+    )
+    async def take_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if not role:
+            await interaction.response.send_message(
+                "❌ الرتبة غير موجودة",
+                ephemeral=True
+            )
+            return
+
+        if role in interaction.user.roles:
+            await interaction.response.send_message(
+                "⚠️ أنت تملك هذه الرتبة بالفعل",
+                ephemeral=True
+            )
+            return
+
+        await interaction.user.add_roles(role)
+
+        await interaction.response.send_message(
+            f"✅ تم إعطاؤك رتبة {role.mention}",
             ephemeral=True
         )
-                embed = discord.Embed(
+
+    @discord.ui.button(
+        label="❌ إزالة الرتبة",
+        style=discord.ButtonStyle.red,
+        custom_id="remove_role_btn"
+    )
+    async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if not role:
+            await interaction.response.send_message(
+                "❌ الرتبة غير موجودة",
+                ephemeral=True
+            )
+            return
+
+        if role not in interaction.user.roles:
+            await interaction.response.send_message(
+                "⚠️ أنت لا تملك هذه الرتبة",
+                ephemeral=True
+            )
+            return
+
+        await interaction.user.remove_roles(role)
+
+        await interaction.response.send_message(
+            f"❌ تم إزالة رتبة {role.mention}",
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="👥 عرض الأعضاء",
+        style=discord.ButtonStyle.blurple,
+        custom_id="show_role_members_btn"
+    )
+    async def show_members(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        role = interaction.guild.get_role(self.role_id)
+
+        if not role:
+            await interaction.response.send_message(
+                "❌ الرتبة غير موجودة",
+                ephemeral=True
+            )
+            return
+
+        members = role.members
+
+        if not members:
+            text = "لا يوجد أحد يملك هذه الرتبة."
+        else:
+            text = "\n".join(
+                [f"• {member.mention}" for member in members[:50]]
+            )
+
+            if len(members) > 50:
+                text += f"\n\nو {len(members) - 50} أعضاء آخرين..."
+
+        embed = discord.Embed(
             title=f"👥 أعضاء رتبة {role.name}",
             description=text,
             color=discord.Color.blue()
@@ -1078,11 +1172,15 @@ class ReactionRoleView(discord.ui.View):
             ephemeral=True
         )
 
+
 # ==================================
-# ضع كود أمر السلاش هنا تماماً 👇
+# أمر السلاش
 # ==================================
 
-@bot.tree.command(name="reaction-role", description="إنشاء بانل أخذ/إزالة رتبة عبر الأزرار")
+@bot.tree.command(
+    name="reaction-role",
+    description="إنشاء بانل أخذ/إزالة رتبة عبر الأزرار"
+)
 @app_commands.describe(
     channel="الروم المراد إرسال البانل إليه",
     role="الرتبة المراد إعطاؤها للعضو",
@@ -1102,11 +1200,12 @@ async def reaction_role(
         description=description,
         color=discord.Color.blurple()
     )
-    
+
     view = ReactionRoleView(role.id)
     msg = await channel.send(embed=embed, view=view)
-    
+
     global persistent_panels
+
     persistent_panels.append({
         "type": "reaction_role",
         "guild_id": interaction.guild.id,
@@ -1114,8 +1213,9 @@ async def reaction_role(
         "message_id": msg.id,
         "role_id": role.id
     })
+
     save_persistent()
-    
+
     await interaction.response.send_message(
         f"✅ تم إنشاء بانل الرتبة بنجاح في {channel.mention} لرتبة {role.mention}",
         ephemeral=True
