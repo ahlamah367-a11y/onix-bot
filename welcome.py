@@ -813,11 +813,414 @@ class ApplyModal(discord.ui.Modal):
                     embed.set_field_at(
                         i,
                         name="📌 الحالة",
-                        value=(
-                            "🔴 **مرفوض**\n"
-                            f"👮 بواسطة: {interaction.user.mention}\n"
-                            f"🕐 الوقت: {application['decision_time']}"
-                        ),
+# ==================================
+# نظام التقديمات المتطور
+# ==================================
+
+def has_application(guild_id, user_id):
+    for app in applications_data.get(str(guild_id), []):
+        if app["user_id"] == user_id and app["status"] == "pending":
+            return True
+    return False
+
+
+# ==================================
+# قائمة أنواع التقديم
+# ==================================
+
+class ApplicationSelectView(discord.ui.View):
+    def __init__(self, guild_id):
+        super().__init__(timeout=None)
+        self.guild_id = str(guild_id)
+
+        types = application_types.get(self.guild_id, [])
+
+        # تحويل البيانات القديمة إذا كانت Dictionary
+        if isinstance(types, dict):
+            options = []
+
+            for name, data in types.items():
+                if isinstance(data, dict):
+                    description = data.get("description", "بدون وصف")
+                else:
+                    description = "بدون وصف"
+
+                options.append(
+                    discord.SelectOption(
+                        label=str(name)[:100],
+                        description=str(description)[:100],
+                        value=str(name)
+                    )
+                )
+
+        else:
+            options = []
+
+            for app_type in types:
+                if not isinstance(app_type, dict):
+                    continue
+
+                if not app_type.get("enabled", True):
+                    continue
+
+                name = app_type.get("name", "تقديم")
+                description = app_type.get("description", "بدون وصف")
+
+                options.append(
+                    discord.SelectOption(
+                        label=str(name)[:100],
+                        description=str(description)[:100],
+                        value=str(name)
+                    )
+                )
+
+        # Discord يسمح بحد أقصى 25 خيارًا
+        options = options[:25]
+
+        if not options:
+            options.append(
+                discord.SelectOption(
+                    label="لا توجد أنواع تقديم",
+                    description="لم تتم إضافة أي نوع تقديم بعد",
+                    value="none"
+                )
+            )
+
+        select = discord.ui.Select(
+            placeholder="📋 اختر نوع التقديم",
+            options=options,
+            custom_id=f"application_select_{self.guild_id}"
+        )
+
+        select.callback = self.select_callback
+        self.add_item(select)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        selected_type = interaction.data["values"][0]
+
+        if selected_type == "none":
+            await interaction.response.send_message(
+                "❌ لا توجد أنواع تقديم متاحة حاليًا.",
+                ephemeral=True
+            )
+            return
+
+        # منع وجود أكثر من تقديم قيد المراجعة
+        if has_application(
+            interaction.guild.id,
+            interaction.user.id
+        ):
+            await interaction.response.send_message(
+                "❌ لديك تقديم قيد المراجعة بالفعل.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.send_modal(
+            ApplyModal(
+                interaction.guild.id,
+                selected_type
+            )
+        )
+
+
+# ==================================
+# نموذج التقديم
+# ==================================
+
+class ApplyModal(discord.ui.Modal):
+    def __init__(self, guild_id, app_type):
+        super().__init__(title=f"تقديم {app_type}")
+
+        self.guild_id = str(guild_id)
+        self.app_type = app_type
+
+        type_questions = (
+            application_questions
+            .get(self.guild_id, {})
+            .get(
+                app_type,
+                [
+                    "اسمك؟",
+                    "عمرك؟",
+                    "خبرتك؟",
+                    "لماذا تريد الانضمام؟",
+                    "أي معلومات إضافية؟"
+                ]
+            )
+        )
+
+        self.inputs = []
+
+        for q in type_questions[:5]:
+            if q and q != "اختياري":
+                item = discord.ui.TextInput(
+                    label=str(q)[:45],
+                    style=discord.TextStyle.paragraph,
+                    required=False
+                )
+
+                self.inputs.append(item)
+                self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        gid = str(interaction.guild.id)
+
+        if has_application(
+            interaction.guild.id,
+            interaction.user.id
+        ):
+            await interaction.response.send_message(
+                "❌ لديك تقديم قيد المراجعة بالفعل.",
+                ephemeral=True
+            )
+            return
+
+        app_id = random.randint(100000, 999999)
+
+        answers = []
+
+        for item in self.inputs:
+            answers.append(item.value or "لم يكتب")
+
+        if gid not in applications_data:
+            applications_data[gid] = []
+
+        applications_data[gid].append({
+            "id": app_id,
+            "user_id": interaction.user.id,
+            "type": self.app_type,
+            "answers": answers,
+            "status": "pending",
+            "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        })
+
+        save_all_applications()
+
+        config = application_config.get(gid, {})
+
+        result_channel_id = (
+            config.get("results_channel")
+            or config.get("channel")
+        )
+
+        result_channel = (
+            interaction.guild.get_channel(result_channel_id)
+            if result_channel_id
+            else None
+        )
+
+        if result_channel:
+            embed = discord.Embed(
+                title="📩 تقديم جديد",
+                color=discord.Color.blue(),
+                timestamp=datetime.utcnow()
+            )
+
+            embed.add_field(
+                name="👤 العضو",
+                value=interaction.user.mention,
+                inline=False
+            )
+
+            embed.add_field(
+                name="📌 النوع",
+                value=self.app_type,
+                inline=False
+            )
+
+            type_questions = (
+                application_questions
+                .get(gid, {})
+                .get(
+                    self.app_type,
+                    [
+                        "السؤال 1",
+                        "السؤال 2",
+                        "السؤال 3",
+                        "السؤال 4",
+                        "السؤال 5"
+                    ]
+                )
+            )
+
+            for i, answer in enumerate(answers):
+                q_name = (
+                    type_questions[i]
+                    if i < len(type_questions)
+                    else f"السؤال {i + 1}"
+                )
+
+                embed.add_field(
+                    name=str(q_name)[:256],
+                    value=str(answer)[:1024],
+                    inline=False
+                )
+
+            embed.add_field(
+                name="📌 الحالة",
+                value="🟡 **قيد المراجعة**",
+                inline=False
+            )
+
+            await result_channel.send(
+                embed=embed,
+                view=ApplicationControlView(
+                    interaction.user.id,
+                    app_id
+                )
+            )
+
+        await interaction.response.send_message(
+            "✅ تم إرسال التقديم بنجاح.",
+            ephemeral=True
+        )
+
+
+# ==================================
+# أزرار قبول ورفض التقديم
+# ==================================
+
+class ApplicationControlView(discord.ui.View):
+    def __init__(self, user_id, app_id):
+        super().__init__(timeout=None)
+
+        self.user_id = user_id
+        self.app_id = app_id
+
+    # ==================================
+    # قبول التقديم
+    # ==================================
+
+    @discord.ui.button(
+        label="قبول",
+        emoji="✅",
+        style=discord.ButtonStyle.green,
+        custom_id="application_accept"
+    )
+    async def accept(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        gid = str(interaction.guild.id)
+
+        application = None
+
+        for app in applications_data.get(gid, []):
+            if app.get("id") == self.app_id:
+                application = app
+                break
+
+        if not application:
+            await interaction.response.send_message(
+                "❌ لم يتم العثور على التقديم.",
+                ephemeral=True
+            )
+            return
+
+        if application.get("status") != "pending":
+            await interaction.response.send_message(
+                "⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.",
+                ephemeral=True
+            )
+            return
+
+        # تحديث الحالة
+        application["status"] = "accepted"
+        application["decision_by"] = interaction.user.id
+        application["decision_time"] = datetime.utcnow().strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        save_all_applications()
+
+        # ==================================
+        # إعطاء رتبة حسب نوع التقديم
+        # ==================================
+
+        member = interaction.guild.get_member(self.user_id)
+        app_type = application.get("type")
+
+        if member:
+            types = application_types.get(gid, [])
+
+            if isinstance(types, dict):
+                types = [
+                    {
+                        "name": name,
+                        **(
+                            data
+                            if isinstance(data, dict)
+                            else {}
+                        )
+                    }
+                    for name, data in types.items()
+                ]
+
+            for app_type_data in types:
+                if not isinstance(app_type_data, dict):
+                    continue
+
+                if app_type_data.get("name") != app_type:
+                    continue
+
+                role_id = app_type_data.get("role_id")
+
+                if role_id:
+                    role = interaction.guild.get_role(role_id)
+
+                    if role:
+                        try:
+                            await member.add_roles(
+                                role,
+                                reason="قبول التقديم"
+                            )
+                        except Exception as e:
+                            print(
+                                f"Role error: {e}"
+                            )
+
+                break
+
+            # ==================================
+            # رسالة خاصة للعضو
+            # ==================================
+
+            try:
+                await member.send(
+                    f"🎉 تم قبول تقديمك!\n"
+                    f"📋 نوع التقديم: `{app_type}`"
+                )
+            except:
+                pass
+
+        # ==================================
+        # تحديث الـ Embed
+        # ==================================
+
+        if (
+            interaction.message
+            and interaction.message.embeds
+        ):
+            embed = interaction.message.embeds[0]
+
+            embed.color = discord.Color.green()
+
+            status_text = (
+                "🟢 **مقبول**\n"
+                f"👮 بواسطة: {interaction.user.mention}\n"
+                f"🕐 الوقت: {application['decision_time']}"
+            )
+
+            found = False
+
+            for i, field in enumerate(embed.fields):
+                if field.name == "📌 الحالة":
+                    embed.set_field_at(
+                        i,
+                        name="📌 الحالة",
+                        value=status_text,
                         inline=False
                     )
 
@@ -827,11 +1230,125 @@ class ApplyModal(discord.ui.Modal):
             if not found:
                 embed.add_field(
                     name="📌 الحالة",
-                    value=(
-                        "🔴 **مرفوض**\n"
-                        f"👮 بواسطة: {interaction.user.mention}\n"
-                        f"🕐 الوقت: {application['decision_time']}"
-                    ),
+                    value=status_text,
+                    inline=False
+                )
+
+            # تعطيل الأزرار
+            for item in self.children:
+                item.disabled = True
+
+            await interaction.message.edit(
+                embed=embed,
+                view=self
+            )
+
+        await interaction.response.send_message(
+            "✅ تم قبول التقديم وتحديث البانل.",
+            ephemeral=True
+        )
+
+    # ==================================
+    # رفض التقديم
+    # ==================================
+
+    @discord.ui.button(
+        label="رفض",
+        emoji="❌",
+        style=discord.ButtonStyle.red,
+        custom_id="application_reject"
+    )
+    async def reject(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        gid = str(interaction.guild.id)
+
+        application = None
+
+        for app in applications_data.get(gid, []):
+            if app.get("id") == self.app_id:
+                application = app
+                break
+
+        if not application:
+            await interaction.response.send_message(
+                "❌ لم يتم العثور على التقديم.",
+                ephemeral=True
+            )
+            return
+
+        if application.get("status") != "pending":
+            await interaction.response.send_message(
+                "⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.",
+                ephemeral=True
+            )
+            return
+
+        # تحديث الحالة
+        application["status"] = "rejected"
+        application["decision_by"] = interaction.user.id
+        application["decision_time"] = datetime.utcnow().strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        save_all_applications()
+
+        # ==================================
+        # إرسال رسالة للعضو
+        # ==================================
+
+        member = interaction.guild.get_member(
+            self.user_id
+        )
+
+        if member:
+            try:
+                await member.send(
+                    f"❌ تم رفض تقديمك.\n"
+                    f"📋 نوع التقديم: "
+                    f"`{application.get('type')}`"
+                )
+            except:
+                pass
+
+        # ==================================
+        # تحديث الـ Embed
+        # ==================================
+
+        if (
+            interaction.message
+            and interaction.message.embeds
+        ):
+            embed = interaction.message.embeds[0]
+
+            embed.color = discord.Color.red()
+
+            status_text = (
+                "🔴 **مرفوض**\n"
+                f"👮 بواسطة: {interaction.user.mention}\n"
+                f"🕐 الوقت: {application['decision_time']}"
+            )
+
+            found = False
+
+            for i, field in enumerate(embed.fields):
+                if field.name == "📌 الحالة":
+                    embed.set_field_at(
+                        i,
+                        name="📌 الحالة",
+                        value=status_text,
+                        inline=False
+                    )
+
+                    found = True
+                    break
+
+            if not found:
+                embed.add_field(
+                    name="📌 الحالة",
+                    value=status_text,
                     inline=False
                 )
 
