@@ -881,9 +881,44 @@ class ApplicationControlView(discord.ui.View):
 
                 if field.name == "📌 الحالة":
 
-                    embed.set_field_at(
+                                        embed.set_field_at(
                         i,
                         name="📌 الحالة",
+                        value=(
+                            "🔴 **مرفوض**\n"
+                            f"👮 بواسطة: {interaction.user.mention}\n"
+                            f"🕐 الوقت: {application['decision_time']}"
+                        ),
+                        inline=False
+                    )
+
+                    found = True
+                    break
+
+            if not found:
+                embed.add_field(
+                    name="📌 الحالة",
+                    value=(
+                        "🔴 **مرفوض**\n"
+                        f"👮 بواسطة: {interaction.user.mention}\n"
+                        f"🕐 الوقت: {application['decision_time']}"
+                    ),
+                    inline=False
+                )
+
+            # تعطيل الأزرار
+            for item in self.children:
+                item.disabled = True
+
+            await interaction.message.edit(
+                embed=embed,
+                view=self
+            )
+
+        await interaction.response.send_message(
+            "❌ تم رفض التقديم وتحديث البانل.",
+            ephemeral=True
+        )
 
 # ==================================
 # قائمة أنواع التقديم
