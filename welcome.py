@@ -884,16 +884,6 @@ class ApplicationControlView(discord.ui.View):
                     embed.set_field_at(
                         i,
                         name="📌 الحالة",
-# ==================================
-# نظام التقديمات المتطور
-# ==================================
-
-def has_application(guild_id, user_id):
-    for app in applications_data.get(str(guild_id), []):
-        if app["user_id"] == user_id and app["status"] == "pending":
-            return True
-    return False
-
 
 # ==================================
 # قائمة أنواع التقديم
