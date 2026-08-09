@@ -447,70 +447,138 @@ async def on_member_remove(member):
 # ==================================
 
 async def anti_check(message):
-    if not message.guild or message.author.bot or has_mod_permission(message.author):
+    if (
+        not message.guild
+        or message.author.bot
+        or has_mod_permission(message.author)
+    ):
         return False
 
     config = anti_config.get(str(message.guild.id), {})
     content = message.content.lower()
     prot = protection_config.get(str(message.guild.id), {})
 
+    # منع المنشن الجماعي
     if config.get("massmention") and message.mention_everyone:
         try:
             await message.delete()
-            await message.author.timeout(timedelta(minutes=5), reason="Mass Mention")
-        except: pass
+            await message.author.timeout(
+                timedelta(minutes=5),
+                reason="Mass Mention"
+            )
+        except:
+            pass
+
         return True
 
+    # منع منشن عدد كبير من الأعضاء
     if config.get("mention") and len(message.mentions) >= 5:
         try:
             await message.delete()
-            await message.author.timeout(timedelta(minutes=3), reason="Spam Mentions")
-        except: pass
+            await message.author.timeout(
+                timedelta(minutes=3),
+                reason="Spam Mentions"
+            )
+        except:
+            pass
+
         return True
 
+    # منع الكلمات الممنوعة
     if config.get("badwords"):
         for word in bad_words:
             if word in content:
                 try:
                     await message.delete()
-                    await message.author.timeout(timedelta(minutes=2), reason="Bad Words")
-                except: pass
+                    await message.author.timeout(
+                        timedelta(minutes=2),
+                        reason="Bad Words"
+                    )
+                except:
+                    pass
+
                 return True
 
-    if (prot.get("anti_links") or prot.get("links")) and re.findall(r"https?://\S+", content):
+    # منع الروابط
+    if (
+        (prot.get("anti_links") or prot.get("links"))
+        and re.findall(r"https?://\S+", content)
+    ):
         try:
             await message.delete()
-            await message.author.timeout(timedelta(minutes=2), reason="رابط ممنوع")
-        except: pass
+            await message.author.timeout(
+                timedelta(minutes=2),
+                reason="رابط ممنوع"
+            )
+        except:
+            pass
+
         return True
 
-    if (prot.get("anti_invite") or prot.get("invites")) and ("discord.gg/" in content or "discord.com/invite/" in content):
+    # منع دعوات Discord
+    if (
+        (prot.get("anti_invite") or prot.get("invites"))
+        and (
+            "discord.gg/" in content
+            or "discord.com/invite/" in content
+        )
+    ):
         try:
             await message.delete()
-            await message.author.timeout(timedelta(minutes=5), reason="دعوة ديسكورد")
-        except: pass
+            await message.author.timeout(
+                timedelta(minutes=5),
+                reason="دعوة ديسكورد"
+            )
+        except:
+            pass
+
         return True
 
     return False
+
 
 @bot.event
 async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
+    # تشغيل نظام الحماية
     if await anti_check(message):
         return
 
+    # نظام XP
     guild_id = str(message.guild.id)
     user_id_str = str(message.author.id)
-    if guild_id not in xp_data: xp_data[guild_id] = {}
-    if user_id_str not in xp_data[guild_id]: xp_data[guild_id][user_id_str] = {"xp": 0, "level": 1}
-    
-    xp_data[guild_id][user_id_str]["xp"] += 1
-    if xp_data[guild_id][user_id_str]["xp"] >= xp_data[guild_id][user_id_str]["level"] * 100:
-        xp_data[guild_id][user_id_str]["level"] += 1
-        await message.channel.send(f"🎉 مبروك {message.author.mention} وصلت للمستوى `{xp_data[guild_id][user_id_str]['level']}`!")
 
+    if guild_id not in xp_data:
+        xp_data[guild_id] = {}
+
+    if user_id_str not in xp_data[guild_id]:
+        xp_data[guild_id][user_id_str] = {
+            "xp": 0,
+            "level": 1
+        }
+
+    xp_data[guild_id][user_id_str]["xp"] += 1
+
+    # رفع المستوى
+    current_xp = xp_data[guild_id][user_id_str]["xp"]
+    current_level = xp_data[guild_id][user_id_str]["level"]
+
+    if current_xp >= current_level * 100:
+        xp_data[guild_id][user_id_str]["level"] += 1
+
+        new_level = xp_data[guild_id][user_id_str]["level"]
+
+        await message.channel.send(
+            f"🎉 مبروك {message.author.mention} "
+            f"وصلت للمستوى `{new_level}`!"
+        )
+
+    # حفظ بيانات XP
+    save_json(XP_FILE, xp_data)
+
+    # تشغيل أوامر البريفكس
     await bot.process_commands(message)
 
 # ==================================
