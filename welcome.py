@@ -862,6 +862,12 @@ class ApplicationControlView(discord.ui.View):
         if member:
             try:
                 await member.send(
+# العضو
+        member = interaction.guild.get_member(self.user_id)
+
+        if member:
+            try:
+                await member.send(
                     f"❌ تم رفض تقديمك.\n"
                     f"📋 نوع التقديم: `{application.get('type')}`"
                 )
@@ -881,7 +887,7 @@ class ApplicationControlView(discord.ui.View):
 
                 if field.name == "📌 الحالة":
 
-                                        embed.set_field_at(
+                    embed.set_field_at(
                         i,
                         name="📌 الحالة",
                         value=(
