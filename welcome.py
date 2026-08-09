@@ -76,12 +76,19 @@ APPLICATION_DECISIONS_FILE = "application_decisions.json"
 APPLICATION_COOLDOWN_FILE = "application_cooldowns.json"
 
 # ==================================
+# 🎮 Fun + Economy + Events System Files
+# ==================================
+
+ECONOMY_FILE = "economy.json"
+ACHIEVEMENTS_FILE = "achievements.json"
+EVENTS_FILE = "events.json"
+FUN_STATS_FILE = "fun_stats.json"
+
+# ==================================
 # General Panels System
 # ==================================
 
 GENERAL_PANELS_FILE = "general_panels.json"
-
-general_panels = load_json = lambda f, d: None # سيتم تعريف الدالة الصحيحة لاحقاً
 
 # ==================================
 # دوال التحميل والحفظ العامة
@@ -130,11 +137,1189 @@ application_questions = load_json(APPLICATION_QUESTIONS_FILE, {})
 application_decisions = load_json(APPLICATION_DECISIONS_FILE, {})
 application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
 
+# تحميل بيانات Fun + Economy + Events
+economy_data = load_json(ECONOMY_FILE, {})
+achievements_data = load_json(ACHIEVEMENTS_FILE, {})
+events_data = load_json(EVENTS_FILE, {})
+fun_stats = load_json(FUN_STATS_FILE, {})
+
 # تعريف ملفات البانلات العامة
 general_panels = load_json(GENERAL_PANELS_FILE, [])
 
 def save_general_panels():
     save_json(GENERAL_PANELS_FILE, general_panels)
+
+# ==================================
+# 💾 الحفظ الخاصة بقسم الاقتصاد والفعاليات
+# ==================================
+
+def save_economy():
+    save_json(ECONOMY_FILE, economy_data)
+
+def save_achievements():
+    save_json(ACHIEVEMENTS_FILE, achievements_data)
+
+def save_events():
+    save_json(EVENTS_FILE, events_data)
+
+def save_fun_stats():
+    save_json(FUN_STATS_FILE, fun_stats)
+
+# ==================================
+# 👤 إنشاء حساب العضو
+# ==================================
+
+def get_economy_user(guild_id, user_id):
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id not in economy_data:
+        economy_data[guild_id] = {}
+
+    if user_id not in economy_data[guild_id]:
+        economy_data[guild_id][user_id] = {
+            "credits": 0,
+            "daily": 0,
+            "work": 0,
+            "games": 0,
+            "wins": 0,
+            "events_won": 0
+        }
+
+    return economy_data[guild_id][user_id]
+
+
+def get_fun_user(guild_id, user_id):
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id not in fun_stats:
+        fun_stats[guild_id] = {}
+
+    if user_id not in fun_stats[guild_id]:
+        fun_stats[guild_id][user_id] = {
+            "games": 0,
+            "wins": 0,
+            "messages": 0
+        }
+
+    return fun_stats[guild_id][user_id]
+
+
+# ==================================
+# 🏆 الإنجازات
+# ==================================
+
+ACHIEVEMENTS = {
+    "first_credit": {
+        "name": "💰 أول كريدت",
+        "description": "احصل على أول Credit",
+        "reward": 100
+    },
+
+    "rich": {
+        "name": "💎 الثري",
+        "description": "وصل إلى 10,000 Credit",
+        "reward": 500
+    },
+
+    "gambler": {
+        "name": "🎲 عاشق الألعاب",
+        "description": "العب 25 لعبة",
+        "reward": 250
+    },
+
+    "winner": {
+        "name": "🏆 الفائز",
+        "description": "اربح 10 ألعاب",
+        "reward": 500
+    },
+
+    "event_winner": {
+        "name": "🎉 بطل الفعاليات",
+        "description": "اربح فعالية",
+        "reward": 1000
+    }
+}
+
+
+def unlock_achievement(guild_id, user_id, achievement_id):
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id not in achievements_data:
+        achievements_data[guild_id] = {}
+
+    if user_id not in achievements_data[guild_id]:
+        achievements_data[guild_id][user_id] = []
+
+    if achievement_id in achievements_data[guild_id][user_id]:
+        return False
+
+    if achievement_id not in ACHIEVEMENTS:
+        return False
+
+    achievements_data[guild_id][user_id].append(achievement_id)
+
+    reward = ACHIEVEMENTS[achievement_id]["reward"]
+
+    user = get_economy_user(guild_id, user_id)
+    user["credits"] += reward
+
+    save_achievements()
+    save_economy()
+
+    return True
+
+
+# ==================================
+# 💰 Balance
+# ==================================
+
+@bot.tree.command(
+    name="balance",
+    description="عرض رصيدك أو رصيد عضو"
+)
+async def balance(
+    interaction: discord.Interaction,
+    member: discord.Member = None
+):
+    member = member or interaction.user
+
+    data = get_economy_user(
+        interaction.guild.id,
+        member.id
+    )
+
+    embed = discord.Embed(
+        title="💰 الرصيد",
+        description=(
+            f"👤 العضو: {member.mention}\n\n"
+            f"💳 **Credits:** `{data['credits']:,}`"
+        ),
+        color=discord.Color.gold()
+    )
+
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# 🎁 Daily
+# ==================================
+
+@bot.tree.command(
+    name="daily",
+    description="استلام مكافأة يومية"
+)
+async def daily(interaction: discord.Interaction):
+
+    user = get_economy_user(
+        interaction.guild.id,
+        interaction.user.id
+    )
+
+    now = int(time.time())
+    cooldown = 86400
+
+    if now - user["daily"] < cooldown:
+        remaining = cooldown - (now - user["daily"])
+
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
+
+        await interaction.response.send_message(
+            f"⏳ ارجع بعد **{hours} ساعة و {minutes} دقيقة**.",
+            ephemeral=True
+        )
+        return
+
+    reward = random.randint(300, 700)
+
+    user["credits"] += reward
+    user["daily"] = now
+
+    save_economy()
+
+    unlocked = unlock_achievement(
+        interaction.guild.id,
+        interaction.user.id,
+        "first_credit"
+    )
+
+    await interaction.response.send_message(
+        f"🎁 حصلت على **{reward:,} Credits** اليوم!\n"
+        f"💰 رصيدك الآن: **{user['credits']:,}**"
+    )
+
+
+# ==================================
+# 💼 Work
+# ==================================
+
+@bot.tree.command(
+    name="work",
+    description="اعمل لتحصل على Credits"
+)
+async def work(interaction: discord.Interaction):
+
+    user = get_economy_user(
+        interaction.guild.id,
+        interaction.user.id
+    )
+
+    now = int(time.time())
+    cooldown = 3600
+
+    if now - user["work"] < cooldown:
+
+        remaining = cooldown - (now - user["work"])
+
+        minutes = remaining // 60
+        seconds = remaining % 60
+
+        await interaction.response.send_message(
+            f"⏳ يمكنك العمل بعد `{minutes}m {seconds}s`.",
+            ephemeral=True
+        )
+        return
+
+    jobs = [
+        "💻 برمجت بوت جديد",
+        "🧹 نظفت السيرفر",
+        "🎮 لعبت مع الأعضاء",
+        "🛠️ ساعدت الإدارة",
+        "📦 رتبت الملفات",
+        "☕ اشتغلت في الكافيه"
+    ]
+
+    job = random.choice(jobs)
+    reward = random.randint(100, 500)
+
+    user["credits"] += reward
+    user["work"] = now
+
+    save_economy()
+
+    unlock_achievement(
+        interaction.guild.id,
+        interaction.user.id,
+        "first_credit"
+    )
+
+    await interaction.response.send_message(
+        f"{job}\n\n"
+        f"💵 حصلت على **{reward:,} Credits**\n"
+        f"💰 رصيدك: **{user['credits']:,}**"
+    )
+
+
+# ==================================
+# 💸 Pay
+# ==================================
+
+@bot.tree.command(
+    name="pay",
+    description="تحويل Credits إلى عضو"
+)
+async def pay(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    amount: int
+):
+
+    if member.bot:
+        await interaction.response.send_message(
+            "❌ لا يمكنك التحويل للبوتات.",
+            ephemeral=True
+        )
+        return
+
+    if member.id == interaction.user.id:
+        await interaction.response.send_message(
+            "😂 تريد تدفع لنفسك؟",
+            ephemeral=True
+        )
+        return
+
+    if amount <= 0:
+        await interaction.response.send_message(
+            "❌ المبلغ يجب أن يكون أكبر من صفر.",
+            ephemeral=True
+        )
+        return
+
+    sender = get_economy_user(
+        interaction.guild.id,
+        interaction.user.id
+    )
+
+    receiver = get_economy_user(
+        interaction.guild.id,
+        member.id
+    )
+
+    if sender["credits"] < amount:
+        await interaction.response.send_message(
+            "❌ ما عندك Credits كافية.",
+            ephemeral=True
+        )
+        return
+
+    sender["credits"] -= amount
+    receiver["credits"] += amount
+
+    save_economy()
+
+    await interaction.response.send_message(
+        f"💸 تم تحويل **{amount:,} Credits** إلى {member.mention}."
+    )
+
+
+# ==================================
+# 🏆 Economy Leaderboard
+# ==================================
+
+@bot.tree.command(
+    name="economy-leaderboard",
+    description="ترتيب أغنى أعضاء السيرفر"
+)
+async def economy_leaderboard(
+    interaction: discord.Interaction
+):
+
+    guild_data = economy_data.get(
+        str(interaction.guild.id),
+        {}
+    )
+
+    ranking = sorted(
+        guild_data.items(),
+        key=lambda x: x[1].get("credits", 0),
+        reverse=True
+    )
+
+    if not ranking:
+        await interaction.response.send_message(
+            "❌ لا توجد بيانات بعد."
+        )
+        return
+
+    lines = []
+
+    medals = ["🥇", "🥈", "🥉"]
+
+    for index, (user_id, data) in enumerate(ranking[:10]):
+
+        member = interaction.guild.get_member(
+            int(user_id)
+        )
+
+        if not member:
+            continue
+
+        medal = (
+            medals[index]
+            if index < 3
+            else f"`#{index + 1}`"
+        )
+
+        lines.append(
+            f"{medal} {member.mention} — "
+            f"**{data.get('credits', 0):,}** 💰"
+        )
+
+    embed = discord.Embed(
+        title="🏆 أغنى أعضاء السيرفر",
+        description="\n".join(lines),
+        color=discord.Color.gold()
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# 🎮 8Ball
+# ==================================
+
+@bot.tree.command(
+    name="8ball",
+    description="اسأل الكرة السحرية"
+)
+async def eight_ball(
+    interaction: discord.Interaction,
+    question: str
+):
+
+    answers = [
+        "نعم ✅",
+        "لا ❌",
+        "غالبًا 🤔",
+        "مستحيل 💀",
+        "أكيد 🔥",
+        "اسألني بكرة 🗿",
+        "الجواب عند المدير 👀",
+        "ما عندي علم 😂",
+        "الاحتمال كبير جدًا 📈",
+        "لا تسأل أسئلة صعبة 😭"
+    ]
+
+    await interaction.response.send_message(
+        f"🎱 **السؤال:** {question}\n\n"
+        f"🔮 **الجواب:** {random.choice(answers)}"
+    )
+
+
+# ==================================
+# 🎲 Dice
+# ==================================
+
+@bot.tree.command(
+    name="dice",
+    description="ارمِ النرد"
+)
+async def dice(interaction: discord.Interaction):
+
+    result = random.randint(1, 6)
+
+    await interaction.response.send_message(
+        f"🎲 رميت النرد وطلع: **{result}**"
+    )
+
+
+# ==================================
+# 🪙 Coin Flip
+# ==================================
+
+@bot.tree.command(
+    name="coinflip",
+    description="اقلب العملة"
+)
+async def coinflip(interaction: discord.Interaction):
+
+    result = random.choice([
+        "🪙 صورة",
+        "🪙 كتابة"
+    ])
+
+    await interaction.response.send_message(
+        f"🪙 النتيجة: **{result}**"
+    )
+
+
+# ==================================
+# 🎯 Choose
+# ==================================
+
+@bot.tree.command(
+    name="choose",
+    description="خل البوت يختار لك"
+)
+async def choose(
+    interaction: discord.Interaction,
+    options: str
+):
+
+    choices = [
+        x.strip()
+        for x in options.split(",")
+        if x.strip()
+    ]
+
+    if len(choices) < 2:
+
+        await interaction.response.send_message(
+            "❌ اكتب خيارين على الأقل مفصولين بفاصلة.\n"
+            "مثال: `/choose بيتزا, برغر, شاورما`",
+            ephemeral=True
+        )
+        return
+
+    selected = random.choice(choices)
+
+    await interaction.response.send_message(
+        f"🎯 اخترت لك: **{selected}**"
+    )
+
+
+# ==================================
+# ⭐ Rank
+# ==================================
+
+@bot.tree.command(
+    name="rank",
+    description="عرض مستواك و XP"
+)
+async def rank(
+    interaction: discord.Interaction,
+    member: discord.Member = None
+):
+
+    member = member or interaction.user
+
+    guild_id = str(interaction.guild.id)
+    user_id = str(member.id)
+
+    guild_xp = xp_data.get(
+        guild_id,
+        {}
+    )
+
+    data = guild_xp.get(
+        user_id,
+        {
+            "xp": 0,
+            "level": 1
+        }
+    )
+
+    level = data.get("level", 1)
+    xp = data.get("xp", 0)
+
+    next_xp = level * 100
+
+    embed = discord.Embed(
+        title=f"⭐ مستوى {member.display_name}",
+        color=discord.Color.blurple()
+    )
+
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+
+    embed.add_field(
+        name="⭐ المستوى",
+        value=f"`{level}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="✨ XP",
+        value=f"`{xp:,}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="📈 المستوى القادم",
+        value=f"`{next_xp:,} XP`",
+        inline=True
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# 👤 Profile
+# ==================================
+
+@bot.tree.command(
+    name="profile",
+    description="عرض ملفك الشخصي الكامل"
+)
+async def profile(
+    interaction: discord.Interaction,
+    member: discord.Member = None
+):
+
+    member = member or interaction.user
+
+    gid = str(interaction.guild.id)
+    uid = str(member.id)
+
+    money = get_economy_user(
+        gid,
+        uid
+    )
+
+    xp = xp_data.get(
+        gid,
+        {}
+    ).get(
+        uid,
+        {
+            "xp": 0,
+            "level": 1
+        }
+    )
+
+    user_achievements = achievements_data.get(
+        gid,
+        {}
+    ).get(
+        uid,
+        []
+    )
+
+    embed = discord.Embed(
+        title=f"👤 ملف {member.display_name}",
+        color=discord.Color.blurple()
+    )
+
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+
+    embed.add_field(
+        name="⭐ المستوى",
+        value=f"`{xp.get('level', 1)}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="✨ XP",
+        value=f"`{xp.get('xp', 0):,}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="💰 Credits",
+        value=f"`{money.get('credits', 0):,}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🎮 الألعاب",
+        value=f"`{money.get('games', 0)}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🏆 الانتصارات",
+        value=f"`{money.get('wins', 0)}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🎉 فعاليات فاز بها",
+        value=f"`{money.get('events_won', 0)}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="🏅 الإنجازات",
+        value=f"`{len(user_achievements)}`",
+        inline=True
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# 🏅 Achievements
+# ==================================
+
+@bot.tree.command(
+    name="achievements",
+    description="عرض إنجازاتك"
+)
+async def achievements(
+    interaction: discord.Interaction,
+    member: discord.Member = None
+):
+
+    member = member or interaction.user
+
+    gid = str(interaction.guild.id)
+    uid = str(member.id)
+
+    unlocked = achievements_data.get(
+        gid,
+        {}
+    ).get(
+        uid,
+        []
+    )
+
+    lines = []
+
+    for achievement_id, info in ACHIEVEMENTS.items():
+
+        if achievement_id in unlocked:
+            lines.append(
+                f"✅ **{info['name']}**\n"
+                f"> {info['description']}"
+            )
+        else:
+            lines.append(
+                f"🔒 **{info['name']}**\n"
+                f"> {info['description']}"
+            )
+
+    embed = discord.Embed(
+        title=f"🏅 إنجازات {member.display_name}",
+        description="\n\n".join(lines),
+        color=discord.Color.gold()
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# 🎉 نظام الفعاليات
+# ==================================
+
+class EventView(discord.ui.View):
+
+    def __init__(self, event_id):
+        super().__init__(timeout=None)
+
+        self.event_id = str(event_id)
+
+        button = discord.ui.Button(
+            label="🎉 مشاركة",
+            style=discord.ButtonStyle.green,
+            custom_id=f"event_join_{self.event_id}"
+        )
+
+        button.callback = self.join_event
+
+        self.add_item(button)
+
+    async def join_event(
+        self,
+        interaction: discord.Interaction
+    ):
+
+        event = events_data.get(
+            self.event_id
+        )
+
+        if not event:
+            await interaction.response.send_message(
+                "❌ هذه الفعالية غير موجودة.",
+                ephemeral=True
+            )
+            return
+
+        if event["ended"]:
+            await interaction.response.send_message(
+                "❌ انتهت الفعالية.",
+                ephemeral=True
+            )
+            return
+
+        user_id = interaction.user.id
+
+        if user_id in event["participants"]:
+            await interaction.response.send_message(
+                "⚠️ أنت مشارك بالفعل!",
+                ephemeral=True
+            )
+            return
+
+        event["participants"].append(
+            user_id
+        )
+
+        save_events()
+
+        await interaction.response.send_message(
+            "🎉 تم تسجيل مشاركتك في الفعالية!",
+            ephemeral=True
+        )
+
+        try:
+
+            await interaction.message.edit(
+                embed=create_event_embed(event),
+                view=self
+            )
+
+        except:
+            pass
+
+
+def create_event_embed(event):
+
+    remaining = max(
+        0,
+        event["end_time"] - int(time.time())
+    )
+
+    minutes = remaining // 60
+    seconds = remaining % 60
+
+    status = (
+        "🟢 مفتوحة"
+        if not event["ended"]
+        else "🔴 انتهت"
+    )
+
+    embed = discord.Embed(
+        title=f"🎉 {event['title']}",
+        description=event["description"],
+        color=discord.Color.blurple()
+    )
+
+    embed.add_field(
+        name="🎁 الجائزة",
+        value=f"**{event['reward']:,} Credits**",
+        inline=True
+    )
+
+    embed.add_field(
+        name="👥 المشاركون",
+        value=f"`{len(event['participants'])}`",
+        inline=True
+    )
+
+    embed.add_field(
+        name="📌 الحالة",
+        value=status,
+        inline=True
+    )
+
+    if not event["ended"]:
+
+        embed.add_field(
+            name="⏳ الوقت المتبقي",
+            value=f"`{minutes}m {seconds}s`",
+            inline=False
+        )
+
+    return embed
+
+
+async def finish_event(event_id):
+
+    event = events_data.get(
+        str(event_id)
+    )
+
+    if not event or event["ended"]:
+        return
+
+    event["ended"] = True
+
+    participants = event.get(
+        "participants",
+        []
+    )
+
+    guild = bot.get_guild(
+        event["guild_id"]
+    )
+
+    channel = (
+        guild.get_channel(event["channel_id"])
+        if guild
+        else None
+    )
+
+    # لا يوجد مشاركين
+    if not participants:
+
+        save_events()
+
+        if channel:
+
+            try:
+
+                message = await channel.fetch_message(
+                    event["message_id"]
+                )
+
+                await message.edit(
+                    embed=create_event_embed(event),
+                    view=None
+                )
+
+                await channel.send(
+                    f"🎉 انتهت فعالية **{event['title']}**\n"
+                    f"❌ لم يشارك أحد، لذلك لا يوجد فائز."
+                )
+
+            except:
+                pass
+
+        return
+
+    winner_id = random.choice(
+        participants
+    )
+
+    winner = (
+        guild.get_member(winner_id)
+        if guild
+        else None
+    )
+
+    # إعطاء الجائزة
+    winner_data = get_economy_user(
+        event["guild_id"],
+        winner_id
+    )
+
+    winner_data["credits"] += event["reward"]
+    winner_data["events_won"] += 1
+
+    save_economy()
+
+    unlock_achievement(
+        event["guild_id"],
+        winner_id,
+        "event_winner"
+    )
+
+    save_events()
+
+    if channel:
+
+        try:
+
+            message = await channel.fetch_message(
+                event["message_id"]
+            )
+
+            await message.edit(
+                embed=create_event_embed(event),
+                view=None
+            )
+
+        except:
+            pass
+
+        winner_text = (
+            winner.mention
+            if winner
+            else f"<@{winner_id}>"
+        )
+
+        await channel.send(
+            f"🎉 **انتهت الفعالية!**\n\n"
+            f"🏆 الفائز: {winner_text}\n"
+            f"💰 الجائزة: **{event['reward']:,} Credits**\n\n"
+            f"مبروك! 🎊"
+        )
+
+
+async def event_timer(event_id):
+
+    event = events_data.get(
+        str(event_id)
+    )
+
+    if not event:
+        return
+
+    remaining = (
+        event["end_time"] - int(time.time())
+    )
+
+    if remaining > 0:
+        await asyncio.sleep(remaining)
+
+    await finish_event(event_id)
+
+
+# ==================================
+# 🎉 إنشاء فعالية
+# ==================================
+
+@bot.tree.command(
+    name="event-create",
+    description="إنشاء فعالية مع جائزة Credits"
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def event_create(
+    interaction: discord.Interaction,
+    title: str,
+    description: str,
+    minutes: int,
+    reward: int
+):
+
+    if minutes <= 0:
+        await interaction.response.send_message(
+            "❌ مدة الفعالية يجب أن تكون أكبر من صفر.",
+            ephemeral=True
+        )
+        return
+
+    if reward <= 0:
+        await interaction.response.send_message(
+            "❌ الجائزة يجب أن تكون أكبر من صفر.",
+            ephemeral=True
+        )
+        return
+
+    event_id = str(
+        random.randint(
+            100000,
+            999999
+        )
+    )
+
+    # التأكد من عدم تكرار ID
+    while event_id in events_data:
+
+        event_id = str(
+            random.randint(
+                100000,
+                999999
+            )
+        )
+
+    event = {
+        "id": event_id,
+        "guild_id": interaction.guild.id,
+        "channel_id": interaction.channel.id,
+        "message_id": None,
+        "title": title,
+        "description": description,
+        "reward": reward,
+        "participants": [],
+        "created_by": interaction.user.id,
+        "end_time": int(time.time()) + (minutes * 60),
+        "ended": False
+    }
+
+    events_data[event_id] = event
+
+    embed = create_event_embed(
+        event
+    )
+
+    message = await interaction.channel.send(
+        embed=embed,
+        view=EventView(event_id)
+    )
+
+    event["message_id"] = message.id
+
+    save_events()
+
+    await interaction.response.send_message(
+        f"✅ تم إنشاء الفعالية!\n"
+        f"🆔 ID: `{event_id}`\n"
+        f"🎁 الجائزة: **{reward:,} Credits**",
+        ephemeral=True
+    )
+
+    asyncio.create_task(
+        event_timer(event_id)
+    )
+
+
+# ==================================
+# 📋 معلومات الفعالية
+# ==================================
+
+@bot.tree.command(
+    name="event-info",
+    description="عرض معلومات فعالية"
+)
+async def event_info(
+    interaction: discord.Interaction,
+    event_id: str
+):
+
+    event = events_data.get(
+        event_id
+    )
+
+    if not event:
+        await interaction.response.send_message(
+            "❌ لم يتم العثور على الفعالية.",
+            ephemeral=True
+        )
+        return
+
+    embed = create_event_embed(
+        event
+    )
+
+    await interaction.response.send_message(
+        embed=embed,
+        ephemeral=True
+    )
+
+
+# ==================================
+# ❌ إنهاء فعالية يدويًا
+# ==================================
+
+@bot.tree.command(
+    name="event-end",
+    description="إنهاء فعالية واختيار الفائز"
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def event_end(
+    interaction: discord.Interaction,
+    event_id: str
+):
+
+    event = events_data.get(
+        event_id
+    )
+
+    if not event:
+        await interaction.response.send_message(
+            "❌ الفعالية غير موجودة.",
+            ephemeral=True
+        )
+        return
+
+    if event["ended"]:
+        await interaction.response.send_message(
+            "⚠️ الفعالية منتهية بالفعل.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message(
+        "⏳ جاري إنهاء الفعالية...",
+        ephemeral=True
+    )
+
+    await finish_event(
+        event_id
+    )
+
+
+# ==================================
+# 🔄 استعادة الفعاليات بعد Restart
+# ==================================
+
+async def restore_events():
+
+    for event_id, event in events_data.items():
+
+        if event.get("ended"):
+            continue
+
+        remaining = (
+            event["end_time"] - int(time.time())
+        )
+
+        if remaining <= 0:
+
+            asyncio.create_task(
+                finish_event(event_id)
+            )
+
+        else:
+
+            asyncio.create_task(
+                event_timer(event_id)
+            )
 
 class GeneralPanelView(discord.ui.View):
     def __init__(self, button_name, button_emoji, button_description):
@@ -507,8 +1692,11 @@ async def on_message(message):
     if user_id_str not in xp_data[guild_id]: xp_data[guild_id][user_id_str] = {"xp": 0, "level": 1}
     
     xp_data[guild_id][user_id_str]["xp"] += 1
+    save_json(XP_FILE, xp_data)
+    
     if xp_data[guild_id][user_id_str]["xp"] >= xp_data[guild_id][user_id_str]["level"] * 100:
         xp_data[guild_id][user_id_str]["level"] += 1
+        save_json(XP_FILE, xp_data)
         await message.channel.send(f"🎉 مبروك {message.author.mention} وصلت للمستوى `{xp_data[guild_id][user_id_str]['level']}`!")
 
     await bot.process_commands(message)
@@ -604,7 +1792,7 @@ class ApplyModal(discord.ui.Modal):
             ephemeral=True
         )
 
- class ApplicationControlView(discord.ui.View):
+class ApplicationControlView(discord.ui.View):
     def __init__(self, user_id, app_id):
         super().__init__(timeout=None)
         self.user_id = user_id
@@ -622,7 +1810,6 @@ class ApplyModal(discord.ui.Modal):
     ):
         gid = str(interaction.guild.id)
 
-        # البحث عن التقديم
         application = None
 
         for app in applications_data.get(gid, []):
@@ -637,7 +1824,6 @@ class ApplyModal(discord.ui.Modal):
             )
             return
 
-        # منع الضغط مرة ثانية
         if application.get("status") != "pending":
             await interaction.response.send_message(
                 "⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.",
@@ -645,7 +1831,6 @@ class ApplyModal(discord.ui.Modal):
             )
             return
 
-        # تحديث الحالة
         application["status"] = "accepted"
         application["decision_by"] = interaction.user.id
         application["decision_time"] = datetime.utcnow().strftime(
@@ -654,7 +1839,6 @@ class ApplyModal(discord.ui.Modal):
 
         save_all_applications()
 
-        # إعطاء الرتبة حسب نوع التقديم
         member = interaction.guild.get_member(self.user_id)
         app_type = application.get("type")
 
@@ -678,7 +1862,6 @@ class ApplyModal(discord.ui.Modal):
 
                     break
 
-            # إرسال رسالة للعضو
             try:
                 await member.send(
                     f"🎉 تم قبول تقديمك!\n"
@@ -687,14 +1870,12 @@ class ApplyModal(discord.ui.Modal):
             except:
                 pass
 
-        # تحديث الـ Embed
         if interaction.message and interaction.message.embeds:
 
             embed = interaction.message.embeds[0]
 
             embed.color = discord.Color.green()
 
-            # البحث عن حقل الحالة وتغييره
             found = False
 
             for i, field in enumerate(embed.fields):
@@ -715,7 +1896,6 @@ class ApplyModal(discord.ui.Modal):
                     found = True
                     break
 
-            # إذا لم يكن هناك حقل حالة
             if not found:
                 embed.add_field(
                     name="📌 الحالة",
@@ -727,7 +1907,6 @@ class ApplyModal(discord.ui.Modal):
                     inline=False
                 )
 
-            # تعطيل الأزرار
             for item in self.children:
                 item.disabled = True
 
@@ -753,7 +1932,6 @@ class ApplyModal(discord.ui.Modal):
     ):
         gid = str(interaction.guild.id)
 
-        # البحث عن التقديم
         application = None
 
         for app in applications_data.get(gid, []):
@@ -768,7 +1946,6 @@ class ApplyModal(discord.ui.Modal):
             )
             return
 
-        # منع الضغط مرة ثانية
         if application.get("status") != "pending":
             await interaction.response.send_message(
                 "⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.",
@@ -776,7 +1953,6 @@ class ApplyModal(discord.ui.Modal):
             )
             return
 
-        # تحديث الحالة
         application["status"] = "rejected"
         application["decision_by"] = interaction.user.id
         application["decision_time"] = datetime.utcnow().strftime(
@@ -785,7 +1961,6 @@ class ApplyModal(discord.ui.Modal):
 
         save_all_applications()
 
-        # العضو
         member = interaction.guild.get_member(self.user_id)
 
         if member:
@@ -797,7 +1972,6 @@ class ApplyModal(discord.ui.Modal):
             except:
                 pass
 
-        # تحديث الـ Embed
         if interaction.message and interaction.message.embeds:
 
             embed = interaction.message.embeds[0]
@@ -835,7 +2009,6 @@ class ApplyModal(discord.ui.Modal):
                     inline=False
                 )
 
-            # تعطيل الأزرار
             for item in self.children:
                 item.disabled = True
 
@@ -849,9 +2022,9 @@ class ApplyModal(discord.ui.Modal):
             ephemeral=True
         )
 
-# ================================
+# ==================================
 # أوامر نظام التقديمات (Slash Commands)
-# ================================
+# ==================================
 
 @bot.tree.command(
     name="application-panel",
@@ -1623,14 +2796,34 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="📊 المعلومات", value="/avatar, /userinfo, /serverinfo, /ping", inline=False)
     embed.add_field(name="📝 التقديمات والترحيب", value="/application-panel, /application-add-type, /application-remove-type, /application-set-questions, /set-welcome, /member-count-setup", inline=False)
     embed.add_field(name="🛡️ الحماية", value="/anti-links, /anti-invite, /badword-add", inline=False)
+    embed.add_field(name="🎮 الاقتصاد والفعاليات", value="/balance, /daily, /work, /pay, /economy-leaderboard, /profile, /achievements, /event-create, /event-info, /event-end", inline=False)
     await interaction.response.send_message(embed=embed)
 
 # ==================================
 # تشغيل البوت والأحداث العامة
 # ==================================
 
+EVENTS_RESTORED = False
+
 @bot.event
 async def on_ready():
+    global EVENTS_RESTORED
+
+    if not EVENTS_RESTORED:
+        EVENTS_RESTORED = True
+
+        for event_id, event in events_data.items():
+            if not event.get("ended") and event.get("message_id"):
+                try:
+                    bot.add_view(
+                        EventView(event_id),
+                        message_id=event["message_id"]
+                    )
+                except Exception as e:
+                    print(f"Event View Error: {e}")
+
+        asyncio.create_task(restore_events())
+
     print(f"🤖 Bot Online: {bot.user}")
     for panel in persistent_panels:
         try:
@@ -1642,7 +2835,6 @@ async def on_ready():
         except Exception as e:
             print(f"Failed persistent view: {e}")
             
-    # تفعيل البانلات العامة عند إعادة تشغيل البوت
     for panel in general_panels:
         try:
             bot.add_view(
