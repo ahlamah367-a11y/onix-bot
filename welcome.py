@@ -600,9 +600,12 @@ class ApplyModal(discord.ui.Modal):
             )
 
         await interaction.response.send_message(
-            "✅ تم إرسال التقديم بنجاح.",
-            ephemeral=True
-        )
+    "✅ تم إرسال التقديم بنجاح.",
+    ephemeral=True
+)
+
+
+class ApplicationControlView(discord.ui.View):
 
  class ApplicationControlView(discord.ui.View):
     def __init__(self, user_id, app_id):
