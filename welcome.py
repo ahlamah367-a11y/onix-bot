@@ -162,22 +162,11 @@ def remove_user_afk(guild_id, user_id):
 
 
 async def handle_afk_message(message):
-    """
-    معالجة AFK:
-    - إزالة AFK عن صاحب الرسالة.
-    - إخبار الشخص بأنه عاد.
-    - إخبار المستخدمين عند منشن شخص AFK.
-    """
-
     if not message.guild or message.author.bot:
         return
 
     guild_id = str(message.guild.id)
     author_id = str(message.author.id)
-
-    # ==================================
-    # إزالة AFK عن صاحب الرسالة
-    # ==================================
 
     own_afk = get_user_afk(
         guild_id,
@@ -185,14 +174,12 @@ async def handle_afk_message(message):
     )
 
     if own_afk:
-
         removed = remove_user_afk(
             guild_id,
             author_id
         )
 
         if removed:
-
             started = removed.get("started_at", time.time())
             duration = max(
                 0,
@@ -225,14 +212,9 @@ async def handle_afk_message(message):
             except:
                 pass
 
-    # ==================================
-    # فحص منشنات AFK
-    # ==================================
-
     notified = set()
 
     for member in message.mentions:
-
         if member.bot:
             continue
 
@@ -307,7 +289,6 @@ async def afk(
     interaction: discord.Interaction,
     reason: str = "غير متوفر"
 ):
-
     guild_id = str(interaction.guild.id)
     user_id = str(interaction.user.id)
 
@@ -315,11 +296,8 @@ async def afk(
         guild_id
     )
 
-    # إذا كان AFK بالفعل
     if user_id in guild_data:
-
         old_data = guild_data[user_id]
-
         old_reason = old_data.get(
             "reason",
             "غير متوفر"
@@ -339,7 +317,6 @@ async def afk(
             embed=embed,
             ephemeral=True
         )
-
         return
 
     now = time.time()
@@ -395,7 +372,6 @@ async def afk_status(
     interaction: discord.Interaction,
     member: discord.Member = None
 ):
-
     member = member or interaction.user
 
     data = get_user_afk(
@@ -404,7 +380,6 @@ async def afk_status(
     )
 
     if not data:
-
         embed = discord.Embed(
             title="🟢 العضو غير AFK",
             description=(
@@ -412,16 +387,13 @@ async def afk_status(
             ),
             color=discord.Color.green()
         )
-
         embed.set_thumbnail(
             url=member.display_avatar.url
         )
-
         await interaction.response.send_message(
             embed=embed,
             ephemeral=True
         )
-
         return
 
     started = float(
@@ -495,29 +467,24 @@ async def afk_status(
 async def afk_list(
     interaction: discord.Interaction
 ):
-
     guild_data = get_guild_afk(
         interaction.guild.id
     )
 
     if not guild_data:
-
         embed = discord.Embed(
             title="💤 قائمة AFK",
             description="لا يوجد أي عضو في وضع AFK حاليًا.",
             color=discord.Color.green()
         )
-
         await interaction.response.send_message(
             embed=embed
         )
-
         return
 
     lines = []
 
     for user_id, data in list(guild_data.items()):
-
         member = interaction.guild.get_member(
             int(user_id)
         )
@@ -548,17 +515,14 @@ async def afk_list(
         )
 
     if not lines:
-
         embed = discord.Embed(
             title="💤 قائمة AFK",
             description="لا يوجد أي عضو في وضع AFK حاليًا.",
             color=discord.Color.green()
         )
-
         await interaction.response.send_message(
             embed=embed
         )
-
         return
 
     text = "\n\n".join(lines[:20])
@@ -600,14 +564,12 @@ async def afk_remove(
     interaction: discord.Interaction,
     member: discord.Member
 ):
-
     data = get_user_afk(
         interaction.guild.id,
         member.id
     )
 
     if not data:
-
         embed = discord.Embed(
             title="⚠️ العضو ليس AFK",
             description=(
@@ -615,12 +577,10 @@ async def afk_remove(
             ),
             color=discord.Color.orange()
         )
-
         await interaction.response.send_message(
             embed=embed,
             ephemeral=True
         )
-
         return
 
     started = float(
@@ -676,7 +636,6 @@ anti_config = load_json(ANTI_CONFIG_FILE, {})
 bad_words = load_json(BAD_WORDS_FILE, [])
 persistent_panels = load_json(PANELS_FILE, [])
 
-# تحميل بيانات نظام التقديمات المتطور
 applications_data = load_json(APPLICATIONS_FILE, {})
 application_config = load_json(APPLICATION_CONFIG_FILE, {})
 application_types = load_json(APPLICATION_TYPES_FILE, {})
@@ -684,7 +643,6 @@ application_questions = load_json(APPLICATION_QUESTIONS_FILE, {})
 application_decisions = load_json(APPLICATION_DECISIONS_FILE, {})
 application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
 
-# تعريف ملفات البانلات العامة
 general_panels = load_json(GENERAL_PANELS_FILE, [])
 
 def save_general_panels():
@@ -707,15 +665,12 @@ class GeneralPanelView(discord.ui.View):
         self.button_label = button_name
         self.button_description = button_description
 
-
     async def button_callback(self, interaction: discord.Interaction):
-
         embed = discord.Embed(
             title=self.button_label,
             description=self.button_description,
             color=discord.Color.blurple()
         )
-
         await interaction.response.send_message(
             embed=embed,
             ephemeral=True
@@ -736,7 +691,6 @@ async def panel(
     button_description: str,
     image: str = None
 ):
-
     embed = discord.Embed(
         title="📌 Panel",
         description=description,
@@ -746,19 +700,16 @@ async def panel(
     if image:
         embed.set_image(url=image)
 
-
     view = GeneralPanelView(
         button_name,
         button_emoji,
         button_description
     )
 
-
     msg = await channel.send(
         embed=embed,
         view=view
     )
-
 
     general_panels.append({
         "guild_id": interaction.guild.id,
@@ -769,9 +720,7 @@ async def panel(
         "button_description": button_description
     })
 
-
     save_general_panels()
-
 
     await interaction.response.send_message(
         "✅ تم إنشاء البانل وحفظه بنجاح",
@@ -996,15 +945,11 @@ async def on_member_remove(member):
     guild_id = str(member.guild.id)
     user_id = str(member.id)
 
-    # تنظيف AFK عند خروج العضو
     if guild_id in afk_users:
         if user_id in afk_users[guild_id]:
-
             del afk_users[guild_id][user_id]
-
             if not afk_users[guild_id]:
                 del afk_users[guild_id]
-
             save_afk()
 
     await update_member_count(member.guild)
@@ -1032,7 +977,6 @@ async def anti_check(message):
     content = message.content.lower()
     prot = protection_config.get(str(message.guild.id), {})
 
-    # منع المنشن الجماعي
     if config.get("massmention") and message.mention_everyone:
         try:
             await message.delete()
@@ -1042,10 +986,8 @@ async def anti_check(message):
             )
         except:
             pass
-
         return True
 
-    # منع منشن عدد كبير من الأعضاء
     if config.get("mention") and len(message.mentions) >= 5:
         try:
             await message.delete()
@@ -1055,10 +997,8 @@ async def anti_check(message):
             )
         except:
             pass
-
         return True
 
-    # منع الكلمات الممنوعة
     if config.get("badwords"):
         for word in bad_words:
             if word in content:
@@ -1070,10 +1010,8 @@ async def anti_check(message):
                     )
                 except:
                     pass
-
                 return True
 
-    # منع الروابط
     if (
         (prot.get("anti_links") or prot.get("links"))
         and re.findall(r"https?://\S+", content)
@@ -1086,10 +1024,8 @@ async def anti_check(message):
             )
         except:
             pass
-
         return True
 
-    # منع دعوات Discord
     if (
         (prot.get("anti_invite") or prot.get("invites"))
         and (
@@ -1105,7 +1041,6 @@ async def anti_check(message):
             )
         except:
             pass
-
         return True
 
     return False
@@ -1116,19 +1051,10 @@ async def on_message(message):
     if message.author.bot or not message.guild:
         return
 
-    # تشغيل نظام الحماية
     if await anti_check(message):
         return
 
-    # ==================================
-    # نظام AFK
-    # ==================================
-
     await handle_afk_message(message)
-
-    # ==================================
-    # نظام XP
-    # ==================================
 
     guild_id = str(message.guild.id)
     user_id_str = str(message.author.id)
@@ -1144,24 +1070,18 @@ async def on_message(message):
 
     xp_data[guild_id][user_id_str]["xp"] += 1
 
-    # رفع المستوى
     current_xp = xp_data[guild_id][user_id_str]["xp"]
     current_level = xp_data[guild_id][user_id_str]["level"]
 
     if current_xp >= current_level * 100:
         xp_data[guild_id][user_id_str]["level"] += 1
-
         new_level = xp_data[guild_id][user_id_str]["level"]
-
         await message.channel.send(
             f"🎉 مبروك {message.author.mention} "
             f"وصلت للمستوى `{new_level}`!"
         )
 
-    # حفظ بيانات XP
     save_json(XP_FILE, xp_data)
-
-    # تشغيل أوامر البريفكس
     await bot.process_commands(message)
 
 # ==================================
@@ -1174,10 +1094,6 @@ def has_application(guild_id, user_id):
             return True
     return False
 
-# ==================================
-# قائمة أنواع التقديم
-# ==================================
-
 class ApplicationSelectView(discord.ui.View):
     def __init__(self, guild_id):
         super().__init__(timeout=None)
@@ -1187,13 +1103,8 @@ class ApplicationSelectView(discord.ui.View):
 
         if isinstance(types, dict):
             options = []
-
             for name, data in types.items():
-                if isinstance(data, dict):
-                    description = data.get("description", "بدون وصف")
-                else:
-                    description = "بدون وصف"
-
+                description = data.get("description", "بدون وصف") if isinstance(data, dict) else "بدون وصف"
                 options.append(
                     discord.SelectOption(
                         label=str(name)[:100],
@@ -1201,15 +1112,10 @@ class ApplicationSelectView(discord.ui.View):
                         value=str(name)
                     )
                 )
-
         else:
             options = []
-
             for app_type in types:
-                if not isinstance(app_type, dict):
-                    continue
-
-                if not app_type.get("enabled", True):
+                if not isinstance(app_type, dict) or not app_type.get("enabled", True):
                     continue
 
                 name = app_type.get("name", "تقديم")
@@ -1271,10 +1177,6 @@ class ApplicationSelectView(discord.ui.View):
         )
 
 
-# ==================================
-# نموذج التقديم
-# ==================================
-
 class ApplyModal(discord.ui.Modal):
     def __init__(self, guild_id, app_type):
         super().__init__(title=f"تقديم {app_type}")
@@ -1306,7 +1208,6 @@ class ApplyModal(discord.ui.Modal):
                     style=discord.TextStyle.paragraph,
                     required=False
                 )
-
                 self.inputs.append(item)
                 self.add_item(item)
 
@@ -1324,11 +1225,7 @@ class ApplyModal(discord.ui.Modal):
             return
 
         app_id = random.randint(100000, 999999)
-
-        answers = []
-
-        for item in self.inputs:
-            answers.append(item.value or "لم يكتب")
+        answers = [item.value or "لم يكتب" for item in self.inputs]
 
         if gid not in applications_data:
             applications_data[gid] = []
@@ -1345,17 +1242,8 @@ class ApplyModal(discord.ui.Modal):
         save_all_applications()
 
         config = application_config.get(gid, {})
-
-        result_channel_id = (
-            config.get("results_channel")
-            or config.get("channel")
-        )
-
-        result_channel = (
-            interaction.guild.get_channel(result_channel_id)
-            if result_channel_id
-            else None
-        )
+        result_channel_id = config.get("results_channel") or config.get("channel")
+        result_channel = interaction.guild.get_channel(result_channel_id) if result_channel_id else None
 
         if result_channel:
             embed = discord.Embed(
@@ -1392,12 +1280,7 @@ class ApplyModal(discord.ui.Modal):
             )
 
             for i, answer in enumerate(answers):
-                q_name = (
-                    type_questions[i]
-                    if i < len(type_questions)
-                    else f"السؤال {i + 1}"
-                )
-
+                q_name = type_questions[i] if i < len(type_questions) else f"السؤال {i + 1}"
                 embed.add_field(
                     name=str(q_name)[:256],
                     value=str(answer)[:1024],
@@ -1424,14 +1307,9 @@ class ApplyModal(discord.ui.Modal):
         )
 
 
-# ==================================
-# أزرار قبول ورفض التقديم
-# ==================================
-
 class ApplicationControlView(discord.ui.View):
     def __init__(self, user_id, app_id):
         super().__init__(timeout=None)
-
         self.user_id = user_id
         self.app_id = app_id
 
@@ -1447,7 +1325,6 @@ class ApplicationControlView(discord.ui.View):
         button: discord.ui.Button
     ):
         gid = str(interaction.guild.id)
-
         application = None
 
         for app in applications_data.get(gid, []):
@@ -1456,24 +1333,16 @@ class ApplicationControlView(discord.ui.View):
                 break
 
         if not application:
-            await interaction.response.send_message(
-                "❌ لم يتم العثور على التقديم.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ لم يتم العثور على التقديم.", ephemeral=True)
             return
 
         if application.get("status") != "pending":
-            await interaction.response.send_message(
-                "⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.", ephemeral=True)
             return
 
         application["status"] = "accepted"
         application["decision_by"] = interaction.user.id
-        application["decision_time"] = datetime.utcnow().strftime(
-            "%Y-%m-%d %H:%M"
-        )
+        application["decision_time"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
 
         save_all_applications()
 
@@ -1482,59 +1351,30 @@ class ApplicationControlView(discord.ui.View):
 
         if member:
             types = application_types.get(gid, [])
-
             if isinstance(types, dict):
-                types = [
-                    {
-                        "name": name,
-                        **(
-                            data
-                            if isinstance(data, dict)
-                            else {}
-                        )
-                    }
-                    for name, data in types.items()
-                ]
+                types = [{"name": name, **(data if isinstance(data, dict) else {})} for name, data in types.items()]
 
             for app_type_data in types:
-                if not isinstance(app_type_data, dict):
-                    continue
-
-                if app_type_data.get("name") != app_type:
+                if not isinstance(app_type_data, dict) or app_type_data.get("name") != app_type:
                     continue
 
                 role_id = app_type_data.get("role_id")
-
                 if role_id:
                     role = interaction.guild.get_role(role_id)
-
                     if role:
                         try:
-                            await member.add_roles(
-                                role,
-                                reason="قبول التقديم"
-                            )
+                            await member.add_roles(role, reason="قبول التقديم")
                         except Exception as e:
-                            print(
-                                f"Role error: {e}"
-                            )
-
+                            print(f"Role error: {e}")
                 break
 
             try:
-                await member.send(
-                    f"🎉 تم قبول تقديمك!\n"
-                    f"📋 نوع التقديم: `{app_type}`"
-                )
+                await member.send(f"🎉 تم قبول تقديمك!\n📋 نوع التقديم: `{app_type}`")
             except:
                 pass
 
-        if (
-            interaction.message
-            and interaction.message.embeds
-        ):
+        if interaction.message and interaction.message.embeds:
             embed = interaction.message.embeds[0]
-
             embed.color = discord.Color.green()
 
             status_text = (
@@ -1544,38 +1384,21 @@ class ApplicationControlView(discord.ui.View):
             )
 
             found = False
-
             for i, field in enumerate(embed.fields):
                 if field.name == "📌 الحالة":
-                    embed.set_field_at(
-                        i,
-                        name="📌 الحالة",
-                        value=status_text,
-                        inline=False
-                    )
-
+                    embed.set_field_at(i, name="📌 الحالة", value=status_text, inline=False)
                     found = True
                     break
 
             if not found:
-                embed.add_field(
-                    name="📌 الحالة",
-                    value=status_text,
-                    inline=False
-                )
+                embed.add_field(name="📌 الحالة", value=status_text, inline=False)
 
             for item in self.children:
                 item.disabled = True
 
-            await interaction.message.edit(
-                embed=embed,
-                view=self
-            )
+            await interaction.message.edit(embed=embed, view=self)
 
-        await interaction.response.send_message(
-            "✅ تم قبول التقديم وتحديث البانل.",
-            ephemeral=True
-        )
+        await interaction.response.send_message("✅ تم قبول التقديم وتحديث البانل.", ephemeral=True)
 
     @discord.ui.button(
         label="رفض",
@@ -1589,7 +1412,6 @@ class ApplicationControlView(discord.ui.View):
         button: discord.ui.Button
     ):
         gid = str(interaction.guild.id)
-
         application = None
 
         for app in applications_data.get(gid, []):
@@ -1598,47 +1420,28 @@ class ApplicationControlView(discord.ui.View):
                 break
 
         if not application:
-            await interaction.response.send_message(
-                "❌ لم يتم العثور على التقديم.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ لم يتم العثور على التقديم.", ephemeral=True)
             return
 
         if application.get("status") != "pending":
-            await interaction.response.send_message(
-                "⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ تم اتخاذ قرار بشأن هذا التقديم مسبقًا.", ephemeral=True)
             return
 
         application["status"] = "rejected"
         application["decision_by"] = interaction.user.id
-        application["decision_time"] = datetime.utcnow().strftime(
-            "%Y-%m-%d %H:%M"
-        )
+        application["decision_time"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
 
         save_all_applications()
 
-        member = interaction.guild.get_member(
-            self.user_id
-        )
-
+        member = interaction.guild.get_member(self.user_id)
         if member:
             try:
-                await member.send(
-                    f"❌ تم رفض تقديمك.\n"
-                    f"📋 نوع التقديم: "
-                    f"`{application.get('type')}`"
-                )
+                await member.send(f"❌ تم رفض تقديمك.\n📋 نوع التقديم: `{application.get('type')}`")
             except:
                 pass
 
-        if (
-            interaction.message
-            and interaction.message.embeds
-        ):
+        if interaction.message and interaction.message.embeds:
             embed = interaction.message.embeds[0]
-
             embed.color = discord.Color.red()
 
             status_text = (
@@ -1648,38 +1451,21 @@ class ApplicationControlView(discord.ui.View):
             )
 
             found = False
-
             for i, field in enumerate(embed.fields):
                 if field.name == "📌 الحالة":
-                    embed.set_field_at(
-                        i,
-                        name="📌 الحالة",
-                        value=status_text,
-                        inline=False
-                    )
-
+                    embed.set_field_at(i, name="📌 الحالة", value=status_text, inline=False)
                     found = True
                     break
 
             if not found:
-                embed.add_field(
-                    name="📌 الحالة",
-                    value=status_text,
-                    inline=False
-                )
+                embed.add_field(name="📌 الحالة", value=status_text, inline=False)
 
             for item in self.children:
                 item.disabled = True
 
-            await interaction.message.edit(
-                embed=embed,
-                view=self
-            )
+            await interaction.message.edit(embed=embed, view=self)
 
-        await interaction.response.send_message(
-            "❌ تم رفض التقديم وتحديث البانل.",
-            ephemeral=True
-        )
+        await interaction.response.send_message("❌ تم رفض التقديم وتحديث البانل.", ephemeral=True)
 
 # ================================
 # أوامر نظام التقديمات (Slash Commands)
@@ -1780,24 +1566,15 @@ async def application_add_type(
     updated = 0
 
     for panel in persistent_panels:
-        if panel.get("type") != "application":
-            continue
-
-        if str(panel.get("guild_id")) != gid:
+        if panel.get("type") != "application" or str(panel.get("guild_id")) != gid:
             continue
 
         try:
-            channel = interaction.guild.get_channel(
-                panel["channel_id"]
-            )
-
+            channel = interaction.guild.get_channel(panel["channel_id"])
             if not channel:
                 continue
 
-            message = await channel.fetch_message(
-                panel["message_id"]
-            )
-
+            message = await channel.fetch_message(panel["message_id"])
             cfg = application_config.get(gid, {})
 
             embed = discord.Embed(
@@ -1815,6 +1592,8 @@ async def application_add_type(
             )
 
             updated += 1
+            # إضافة فاصل زمني لتفادي Rate Limit عند التعديل المتكرر للبانلات
+            await asyncio.sleep(0.5)
 
         except Exception as e:
             print(f"Panel update error: {e}")
@@ -1898,21 +1677,54 @@ async def application_list(interaction: discord.Interaction):
         embed.add_field(name=f"#{app['id']} - {app['type']}", value=f"👤 <@{app['user_id']}>\n📌 الحالة: {app['status']}", inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="reset-panels", description="إعادة تحميل جميع البانلات")
+# ----------------------------------------------------
+# الحل المحسّن لأمر reset-panels (تجنب 429 و 10062)
+# ----------------------------------------------------
+@bot.tree.command(name="reset-panels", description="إزالة الأزرار من البانلات القديمة بأمان")
 @app_commands.checks.has_permissions(administrator=True)
 async def reset_panels(interaction: discord.Interaction):
+    # تثبيت التفاعل فوراً لمنع انتهاء المهلة (Unknown interaction 10062)
+    await interaction.response.defer(ephemeral=True)
+
     count = 0
+    checked = 0
+
     for guild in bot.guilds:
         for channel in guild.text_channels:
             try:
                 async for msg in channel.history(limit=50):
-                    if msg.author == bot.user:
-                        if msg.components:
-                            await msg.edit(view=None)
-                            count += 1
-            except:
-                pass
-    await interaction.response.send_message(f"♻️ تم Reset عدد `{count}` بانل.", ephemeral=True)
+                    checked += 1
+
+                    if msg.author != bot.user:
+                        continue
+
+                    if not msg.components:
+                        continue
+
+                    try:
+                        await msg.edit(view=None)
+                        count += 1
+                        # تخفيف الضغط لتجنب Rate Limit (429)
+                        await asyncio.sleep(0.5)
+
+                    except discord.HTTPException as e:
+                        if e.status == 429:
+                            await asyncio.sleep(5)
+                        else:
+                            print(f"Panel edit error: {e}")
+
+            except discord.Forbidden:
+                continue
+            except discord.HTTPException as e:
+                print(f"History error in #{channel.name}: {e}")
+            except Exception as e:
+                print(f"Reset error in #{channel.name}: {e}")
+
+    await interaction.followup.send(
+        f"♻️ تم Reset عدد `{count}` بانل.\n"
+        f"🔎 تم فحص `{checked}` رسالة.",
+        ephemeral=True
+    )
 
 # ==================================
 # Reaction Roles System
@@ -1929,29 +1741,17 @@ class ReactionRoleView(discord.ui.View):
         custom_id="take_role_btn"
     )
     async def take_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-
         role = interaction.guild.get_role(self.role_id)
-
         if not role:
-            await interaction.response.send_message(
-                "❌ الرتبة غير موجودة",
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
             return
 
         if role in interaction.user.roles:
-            await interaction.response.send_message(
-                "⚠️ أنت تملك هذه الرتبة بالفعل",
-                ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ أنت تملك هذه الرتبة بالفعل", ephemeral=True)
             return
 
         await interaction.user.add_roles(role)
-
-        await interaction.response.send_message(
-            f"✅ تم إعطاؤك رتبة {role.mention}",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
 
     @discord.ui.button(
         label="❌ إزالة الرتبة",
@@ -1959,29 +1759,17 @@ class ReactionRoleView(discord.ui.View):
         custom_id="remove_role_btn"
     )
     async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
-
         role = interaction.guild.get_role(self.role_id)
-
         if not role:
-            await interaction.response.send_message(
-                "❌ الرتبة غير موجودة",
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
             return
 
         if role not in interaction.user.roles:
-            await interaction.response.send_message(
-                "⚠️ أنت لا تملك هذه الرتبة",
-                ephemeral=True
-            )
+            await interaction.response.send_message("⚠️ أنت لا تملك هذه الرتبة", ephemeral=True)
             return
 
         await interaction.user.remove_roles(role)
-
-        await interaction.response.send_message(
-            f"❌ تم إزالة رتبة {role.mention}",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
 
     @discord.ui.button(
         label="👥 عرض الأعضاء",
@@ -1989,25 +1777,16 @@ class ReactionRoleView(discord.ui.View):
         custom_id="show_role_members_btn"
     )
     async def show_members(self, interaction: discord.Interaction, button: discord.ui.Button):
-
         role = interaction.guild.get_role(self.role_id)
-
         if not role:
-            await interaction.response.send_message(
-                "❌ الرتبة غير موجودة",
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ الرتبة غير موجودة", ephemeral=True)
             return
 
         members = role.members
-
         if not members:
             text = "لا يوجد أحد يملك هذه الرتبة."
         else:
-            text = "\n".join(
-                [f"• {member.mention}" for member in members[:50]]
-            )
-
+            text = "\n".join([f"• {member.mention}" for member in members[:50]])
             if len(members) > 50:
                 text += f"\n\nو {len(members) - 50} أعضاء آخرين..."
 
@@ -2016,11 +1795,7 @@ class ReactionRoleView(discord.ui.View):
             description=text,
             color=discord.Color.blue()
         )
-
-        await interaction.response.send_message(
-            embed=embed,
-            ephemeral=True
-        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(
     name="reaction-role",
@@ -2050,7 +1825,6 @@ async def reaction_role(
     msg = await channel.send(embed=embed, view=view)
 
     global persistent_panels
-
     persistent_panels.append({
         "type": "reaction_role",
         "guild_id": interaction.guild.id,
@@ -2058,14 +1832,12 @@ async def reaction_role(
         "message_id": msg.id,
         "role_id": role.id
     })
-
     save_persistent()
 
     await interaction.response.send_message(
         f"✅ تم إنشاء بانل الرتبة بنجاح في {channel.mention} لرتبة {role.mention}",
         ephemeral=True
     )
-
 
 # ==================================
 # أوامر الإدارة والعقوبات (Moderation)
