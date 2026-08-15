@@ -100,6 +100,562 @@ def save_json(filename, data):
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4, ensure_ascii=False)
 
+# ==================================
+# نظام AFK المتكامل
+# ==================================
+
+def save_afk():
+    save_json(AFK_FILE, afk_users)
+
+
+def format_afk_duration(seconds: float):
+    seconds = int(seconds)
+
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+
+    parts = []
+
+    if days:
+        parts.append(f"{days} يوم")
+    if hours:
+        parts.append(f"{hours} ساعة")
+    if minutes:
+        parts.append(f"{minutes} دقيقة")
+    if seconds and not parts:
+        parts.append(f"{seconds} ثانية")
+
+    return " و".join(parts) if parts else "أقل من ثانية"
+
+
+def get_guild_afk(guild_id):
+    guild_id = str(guild_id)
+
+    if guild_id not in afk_users:
+        afk_users[guild_id] = {}
+
+    return afk_users[guild_id]
+
+
+def get_user_afk(guild_id, user_id):
+    guild_data = get_guild_afk(guild_id)
+    return guild_data.get(str(user_id))
+
+
+def remove_user_afk(guild_id, user_id):
+    guild_id = str(guild_id)
+    user_id = str(user_id)
+
+    if guild_id not in afk_users:
+        return None
+
+    data = afk_users[guild_id].pop(user_id, None)
+
+    if not afk_users[guild_id]:
+        afk_users.pop(guild_id, None)
+
+    if data:
+        save_afk()
+
+    return data
+
+
+async def handle_afk_message(message):
+    """
+    معالجة AFK:
+    - إزالة AFK عن صاحب الرسالة.
+    - إخبار الشخص بأنه عاد.
+    - إخبار المستخدمين عند منشن شخص AFK.
+    """
+
+    if not message.guild or message.author.bot:
+        return
+
+    guild_id = str(message.guild.id)
+    author_id = str(message.author.id)
+
+    # ==================================
+    # إزالة AFK عن صاحب الرسالة
+    # ==================================
+
+    own_afk = get_user_afk(
+        guild_id,
+        author_id
+    )
+
+    if own_afk:
+
+        removed = remove_user_afk(
+            guild_id,
+            author_id
+        )
+
+        if removed:
+
+            started = removed.get("started_at", time.time())
+            duration = max(
+                0,
+                time.time() - float(started)
+            )
+
+            embed = discord.Embed(
+                title="👋 أهلًا بعودتك!",
+                description=(
+                    f"{message.author.mention} رجعت من وضع **AFK**.\n\n"
+                    f"⏱️ **مدة الغياب:** `{format_afk_duration(duration)}`"
+                ),
+                color=discord.Color.green(),
+                timestamp=datetime.utcnow()
+            )
+
+            embed.set_thumbnail(
+                url=message.author.display_avatar.url
+            )
+
+            embed.set_footer(
+                text="تم إلغاء حالة AFK تلقائيًا"
+            )
+
+            try:
+                await message.channel.send(
+                    embed=embed,
+                    delete_after=8
+                )
+            except:
+                pass
+
+    # ==================================
+    # فحص منشنات AFK
+    # ==================================
+
+    notified = set()
+
+    for member in message.mentions:
+
+        if member.bot:
+            continue
+
+        if member.id in notified:
+            continue
+
+        notified.add(member.id)
+
+        data = get_user_afk(
+            guild_id,
+            member.id
+        )
+
+        if not data:
+            continue
+
+        reason = data.get(
+            "reason",
+            "لم يتم تحديد سبب"
+        )
+
+        started = data.get(
+            "started_at",
+            time.time()
+        )
+
+        duration = max(
+            0,
+            time.time() - float(started)
+        )
+
+        embed = discord.Embed(
+            title="💤 هذا العضو في وضع AFK",
+            description=(
+                f"👤 **العضو:** {member.mention}\n"
+                f"💬 **السبب:** {reason}\n"
+                f"⏱️ **منذ:** `{format_afk_duration(duration)}`"
+            ),
+            color=discord.Color.orange(),
+            timestamp=datetime.utcnow()
+        )
+
+        embed.set_thumbnail(
+            url=member.display_avatar.url
+        )
+
+        embed.set_footer(
+            text="قد يكون العضو غير متواجد حاليًا"
+        )
+
+        try:
+            await message.channel.send(
+                embed=embed,
+                delete_after=10
+            )
+        except:
+            pass
+
+
+# ==================================
+# /afk
+# ==================================
+
+@bot.tree.command(
+    name="afk",
+    description="تفعيل وضع AFK"
+)
+@app_commands.describe(
+    reason="سبب الغياب - اختياري"
+)
+async def afk(
+    interaction: discord.Interaction,
+    reason: str = "غير متوفر"
+):
+
+    guild_id = str(interaction.guild.id)
+    user_id = str(interaction.user.id)
+
+    guild_data = get_guild_afk(
+        guild_id
+    )
+
+    # إذا كان AFK بالفعل
+    if user_id in guild_data:
+
+        old_data = guild_data[user_id]
+
+        old_reason = old_data.get(
+            "reason",
+            "غير متوفر"
+        )
+
+        embed = discord.Embed(
+            title="💤 أنت بالفعل AFK",
+            description=(
+                f"أنت حاليًا في وضع **AFK**.\n\n"
+                f"💬 **السبب الحالي:** {old_reason}\n\n"
+                f"يمكنك فقط إرسال رسالة في الشات للعودة تلقائيًا."
+            ),
+            color=discord.Color.orange()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+        return
+
+    now = time.time()
+
+    guild_data[user_id] = {
+        "reason": reason,
+        "started_at": now,
+        "started_at_text": datetime.utcnow().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+    }
+
+    save_afk()
+
+    embed = discord.Embed(
+        title="💤 تم تفعيل وضع AFK",
+        description=(
+            f"👤 **العضو:** {interaction.user.mention}\n\n"
+            f"💬 **السبب:** {reason}\n"
+            f"🕐 **وقت التفعيل:** <t:{int(now)}:F>\n"
+            f"⏱️ **منذ:** <t:{int(now)}:R>\n\n"
+            f"📌 سيتم إلغاء AFK تلقائيًا عند إرسال رسالة."
+        ),
+        color=discord.Color.blurple(),
+        timestamp=datetime.utcnow()
+    )
+
+    embed.set_thumbnail(
+        url=interaction.user.display_avatar.url
+    )
+
+    embed.set_footer(
+        text=f"AFK • {interaction.guild.name}"
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# /afk-status
+# ==================================
+
+@bot.tree.command(
+    name="afk-status",
+    description="عرض حالة AFK لعضو"
+)
+@app_commands.describe(
+    member="العضو المراد فحص حالته"
+)
+async def afk_status(
+    interaction: discord.Interaction,
+    member: discord.Member = None
+):
+
+    member = member or interaction.user
+
+    data = get_user_afk(
+        interaction.guild.id,
+        member.id
+    )
+
+    if not data:
+
+        embed = discord.Embed(
+            title="🟢 العضو غير AFK",
+            description=(
+                f"{member.mention} ليس في وضع **AFK** حاليًا."
+            ),
+            color=discord.Color.green()
+        )
+
+        embed.set_thumbnail(
+            url=member.display_avatar.url
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+        return
+
+    started = float(
+        data.get(
+            "started_at",
+            time.time()
+        )
+    )
+
+    duration = max(
+        0,
+        time.time() - started
+    )
+
+    reason = data.get(
+        "reason",
+        "غير متوفر"
+    )
+
+    embed = discord.Embed(
+        title="💤 حالة AFK",
+        description=f"{member.mention} حاليًا في وضع **AFK**.",
+        color=discord.Color.orange()
+    )
+
+    embed.add_field(
+        name="💬 السبب",
+        value=reason,
+        inline=False
+    )
+
+    embed.add_field(
+        name="⏱️ مدة الغياب",
+        value=format_afk_duration(duration),
+        inline=True
+    )
+
+    embed.add_field(
+        name="🕐 بدأ AFK",
+        value=f"<t:{int(started)}:R>",
+        inline=True
+    )
+
+    embed.add_field(
+        name="📅 الوقت",
+        value=f"<t:{int(started)}:F>",
+        inline=False
+    )
+
+    embed.set_thumbnail(
+        url=member.display_avatar.url
+    )
+
+    embed.set_footer(
+        text="نظام AFK"
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# /afk-list
+# ==================================
+
+@bot.tree.command(
+    name="afk-list",
+    description="عرض جميع الأعضاء الموجودين في وضع AFK"
+)
+async def afk_list(
+    interaction: discord.Interaction
+):
+
+    guild_data = get_guild_afk(
+        interaction.guild.id
+    )
+
+    if not guild_data:
+
+        embed = discord.Embed(
+            title="💤 قائمة AFK",
+            description="لا يوجد أي عضو في وضع AFK حاليًا.",
+            color=discord.Color.green()
+        )
+
+        await interaction.response.send_message(
+            embed=embed
+        )
+
+        return
+
+    lines = []
+
+    for user_id, data in list(guild_data.items()):
+
+        member = interaction.guild.get_member(
+            int(user_id)
+        )
+
+        if not member:
+            continue
+
+        started = float(
+            data.get(
+                "started_at",
+                time.time()
+            )
+        )
+
+        duration = max(
+            0,
+            time.time() - started
+        )
+
+        reason = data.get(
+            "reason",
+            "غير متوفر"
+        )
+
+        lines.append(
+            f"👤 {member.mention}\n"
+            f"💬 `{reason}` • ⏱️ `{format_afk_duration(duration)}`"
+        )
+
+    if not lines:
+
+        embed = discord.Embed(
+            title="💤 قائمة AFK",
+            description="لا يوجد أي عضو في وضع AFK حاليًا.",
+            color=discord.Color.green()
+        )
+
+        await interaction.response.send_message(
+            embed=embed
+        )
+
+        return
+
+    text = "\n\n".join(lines[:20])
+
+    if len(lines) > 20:
+        text += f"\n\n📌 وهناك `{len(lines) - 20}` عضو آخر."
+
+    embed = discord.Embed(
+        title="💤 أعضاء AFK",
+        description=text,
+        color=discord.Color.orange(),
+        timestamp=datetime.utcnow()
+    )
+
+    embed.set_footer(
+        text=f"إجمالي AFK: {len(lines)}"
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
+# ==================================
+# /afk-remove
+# ==================================
+
+@bot.tree.command(
+    name="afk-remove",
+    description="إزالة AFK عن عضو يدويًا"
+)
+@app_commands.describe(
+    member="العضو المراد إزالة AFK عنه"
+)
+@app_commands.checks.has_permissions(
+    manage_messages=True
+)
+async def afk_remove(
+    interaction: discord.Interaction,
+    member: discord.Member
+):
+
+    data = get_user_afk(
+        interaction.guild.id,
+        member.id
+    )
+
+    if not data:
+
+        embed = discord.Embed(
+            title="⚠️ العضو ليس AFK",
+            description=(
+                f"{member.mention} ليس في وضع AFK حاليًا."
+            ),
+            color=discord.Color.orange()
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+        return
+
+    started = float(
+        data.get(
+            "started_at",
+            time.time()
+        )
+    )
+
+    duration = max(
+        0,
+        time.time() - started
+    )
+
+    remove_user_afk(
+        interaction.guild.id,
+        member.id
+    )
+
+    embed = discord.Embed(
+        title="✅ تم إزالة AFK",
+        description=(
+            f"👤 **العضو:** {member.mention}\n"
+            f"⏱️ **مدة AFK:** `{format_afk_duration(duration)}`\n"
+            f"👮 **بواسطة:** {interaction.user.mention}"
+        ),
+        color=discord.Color.green(),
+        timestamp=datetime.utcnow()
+    )
+
+    await interaction.response.send_message(
+        embed=embed
+    )
+
+
 def save_error(error):
     logs = load_json(ERROR_LOG_FILE, [])
     logs.append({
@@ -437,8 +993,28 @@ async def on_member_join(member):
 
 @bot.event
 async def on_member_remove(member):
+    guild_id = str(member.guild.id)
+    user_id = str(member.id)
+
+    # تنظيف AFK عند خروج العضو
+    if guild_id in afk_users:
+        if user_id in afk_users[guild_id]:
+
+            del afk_users[guild_id][user_id]
+
+            if not afk_users[guild_id]:
+                del afk_users[guild_id]
+
+            save_afk()
+
     await update_member_count(member.guild)
-    await send_log(member.guild, "📤 خروج عضو", f"العضو: {member.mention} (`{member.id}`)", discord.Color.dark_red())
+
+    await send_log(
+        member.guild,
+        "📤 خروج عضو",
+        f"العضو: {member.mention} (`{member.id}`)",
+        discord.Color.dark_red()
+    )
 
 # ==================================
 # فحص الحماية المتقدم (Anti Check)
@@ -544,7 +1120,16 @@ async def on_message(message):
     if await anti_check(message):
         return
 
+    # ==================================
+    # نظام AFK
+    # ==================================
+
+    await handle_afk_message(message)
+
+    # ==================================
     # نظام XP
+    # ==================================
+
     guild_id = str(message.guild.id)
     user_id_str = str(message.author.id)
 
@@ -600,7 +1185,6 @@ class ApplicationSelectView(discord.ui.View):
 
         types = application_types.get(self.guild_id, [])
 
-        # تحويل البيانات القديمة إذا كانت Dictionary
         if isinstance(types, dict):
             options = []
 
@@ -639,7 +1223,6 @@ class ApplicationSelectView(discord.ui.View):
                     )
                 )
 
-        # Discord يسمح بحد أقصى 25 خيارًا
         options = options[:25]
 
         if not options:
@@ -670,7 +1253,6 @@ class ApplicationSelectView(discord.ui.View):
             )
             return
 
-        # منع وجود أكثر من تقديم قيد المراجعة
         if has_application(
             interaction.guild.id,
             interaction.user.id
@@ -853,10 +1435,6 @@ class ApplicationControlView(discord.ui.View):
         self.user_id = user_id
         self.app_id = app_id
 
-    # ==================================
-    # قبول التقديم
-    # ==================================
-
     @discord.ui.button(
         label="قبول",
         emoji="✅",
@@ -891,7 +1469,6 @@ class ApplicationControlView(discord.ui.View):
             )
             return
 
-        # تحديث الحالة
         application["status"] = "accepted"
         application["decision_by"] = interaction.user.id
         application["decision_time"] = datetime.utcnow().strftime(
@@ -899,10 +1476,6 @@ class ApplicationControlView(discord.ui.View):
         )
 
         save_all_applications()
-
-        # ==================================
-        # إعطاء رتبة حسب نوع التقديم
-        # ==================================
 
         member = interaction.guild.get_member(self.user_id)
         app_type = application.get("type")
@@ -948,10 +1521,6 @@ class ApplicationControlView(discord.ui.View):
 
                 break
 
-            # ==================================
-            # رسالة خاصة للعضو
-            # ==================================
-
             try:
                 await member.send(
                     f"🎉 تم قبول تقديمك!\n"
@@ -959,10 +1528,6 @@ class ApplicationControlView(discord.ui.View):
                 )
             except:
                 pass
-
-        # ==================================
-        # تحديث الـ Embed
-        # ==================================
 
         if (
             interaction.message
@@ -999,7 +1564,6 @@ class ApplicationControlView(discord.ui.View):
                     inline=False
                 )
 
-            # تعطيل الأزرار
             for item in self.children:
                 item.disabled = True
 
@@ -1012,10 +1576,6 @@ class ApplicationControlView(discord.ui.View):
             "✅ تم قبول التقديم وتحديث البانل.",
             ephemeral=True
         )
-
-    # ==================================
-    # رفض التقديم
-    # ==================================
 
     @discord.ui.button(
         label="رفض",
@@ -1051,7 +1611,6 @@ class ApplicationControlView(discord.ui.View):
             )
             return
 
-        # تحديث الحالة
         application["status"] = "rejected"
         application["decision_by"] = interaction.user.id
         application["decision_time"] = datetime.utcnow().strftime(
@@ -1059,10 +1618,6 @@ class ApplicationControlView(discord.ui.View):
         )
 
         save_all_applications()
-
-        # ==================================
-        # إرسال رسالة للعضو
-        # ==================================
 
         member = interaction.guild.get_member(
             self.user_id
@@ -1077,10 +1632,6 @@ class ApplicationControlView(discord.ui.View):
                 )
             except:
                 pass
-
-        # ==================================
-        # تحديث الـ Embed
-        # ==================================
 
         if (
             interaction.message
@@ -1117,7 +1668,6 @@ class ApplicationControlView(discord.ui.View):
                     inline=False
                 )
 
-            # تعطيل الأزرار
             for item in self.children:
                 item.disabled = True
 
@@ -1471,10 +2021,6 @@ class ReactionRoleView(discord.ui.View):
             embed=embed,
             ephemeral=True
         )
-
-# ==================================
-# أمر السلاش
-# ==================================
 
 @bot.tree.command(
     name="reaction-role",
@@ -1905,6 +2451,7 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(name="📊 المعلومات", value="/avatar, /userinfo, /serverinfo, /ping", inline=False)
     embed.add_field(name="📝 التقديمات والترحيب", value="/application-panel, /application-add-type, /application-remove-type, /application-set-questions, /set-welcome, /member-count-setup", inline=False)
     embed.add_field(name="🛡️ الحماية", value="/anti-links, /anti-invite, /badword-add", inline=False)
+    embed.add_field(name="💤 نظام الـ AFK", value="/afk, /afk-status, /afk-list, /afk-remove", inline=False)
     await interaction.response.send_message(embed=embed)
 
 # ==================================
@@ -1924,7 +2471,6 @@ async def on_ready():
         except Exception as e:
             print(f"Failed persistent view: {e}")
             
-    # تفعيل البانلات العامة عند إعادة تشغيل البوت
     for panel in general_panels:
         try:
             bot.add_view(
