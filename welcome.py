@@ -76,12 +76,6 @@ APPLICATION_DECISIONS_FILE = "application_decisions.json"
 APPLICATION_COOLDOWN_FILE = "application_cooldowns.json"
 
 # ==================================
-# General Panels System
-# ==================================
-
-GENERAL_PANELS_FILE = "general_panels.json"
-
-# ==================================
 # دوال التحميل والحفظ العامة
 # ==================================
 
@@ -643,112 +637,1674 @@ application_questions = load_json(APPLICATION_QUESTIONS_FILE, {})
 application_decisions = load_json(APPLICATION_DECISIONS_FILE, {})
 application_cooldowns = load_json(APPLICATION_COOLDOWN_FILE, {})
 
+# ==================================
+# General Panel Builder System
+# /panel
+# ==================================
+
+GENERAL_PANELS_FILE = "general_panels.json"
+
 general_panels = load_json(GENERAL_PANELS_FILE, [])
 
 def save_general_panels():
     save_json(GENERAL_PANELS_FILE, general_panels)
 
-class GeneralPanelView(discord.ui.View):
-    def __init__(self, button_name, button_emoji, button_description):
-        super().__init__(timeout=None)
 
-        button = discord.ui.Button(
-            label=button_name,
-            emoji=button_emoji,
-            style=discord.ButtonStyle.primary,
-            custom_id=f"general_panel_{button_name}"
+# ==================================
+# ألوان البانلات
+# ==================================
+
+PANEL_COLORS = {
+    "أزرق": discord.Color.blue(),
+    "أخضر": discord.Color.green(),
+    "أحمر": discord.Color.red(),
+    "بنفسجي": discord.Color.purple(),
+    "ذهبي": discord.Color.gold(),
+    "برتقالي": discord.Color.orange(),
+    "وردي": discord.Color.magenta(),
+    "رمادي": discord.Color.light_grey(),
+    "أسود": discord.Color.from_rgb(0, 0, 0),
+}
+
+
+def panel_color(name):
+    return PANEL_COLORS.get(
+        name,
+        discord.Color.blurple()
+    )
+
+
+# ==================================
+# إنشاء Embed
+# ==================================
+
+def build_panel_embed(data):
+    embed = discord.Embed(
+        title=data.get("title") or None,
+        description=data.get("description") or None,
+        color=panel_color(
+            data.get("color", "أزرق")
+        )
+    )
+
+    image = data.get("image")
+
+    if image:
+        try:
+            embed.set_image(url=image)
+        except:
+            pass
+
+    return embed
+
+
+# ==================================
+# مدير إنشاء البانل
+# ==================================
+
+class PanelBuilder:
+
+    def __init__(self, user_id):
+        self.user_id = user_id
+
+        self.data = {
+            "title": "",
+            "description": "",
+            "image": "",
+            "color": "أزرق",
+            "buttons": []
+        }
+
+        self.current_button = 0
+        self.current_inner_button = 0
+
+
+# ==================================
+# التحقق من صاحب العملية
+# ==================================
+
+def panel_owner(interaction, builder):
+
+    return interaction.user.id == builder.user_id
+
+
+# ==================================
+# Modal معلومات البانل
+# ==================================
+
+class MainPanelModal(discord.ui.Modal):
+
+    def __init__(self, builder):
+        super().__init__(
+            title="معلومات البانل"
         )
 
-        button.callback = self.button_callback
-        self.add_item(button)
+        self.builder = builder
 
-        self.button_label = button_name
-        self.button_description = button_description
-
-    async def button_callback(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title=self.button_label,
-            description=self.button_description,
-            color=discord.Color.blurple()
+        self.title_input = discord.ui.TextInput(
+            label="عنوان",
+            placeholder="عنوان البانل",
+            required=False,
+            max_length=256
         )
+
+        self.description_input = discord.ui.TextInput(
+            label="وصف",
+            placeholder="وصف البانل",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=4000
+        )
+
+        self.image_input = discord.ui.TextInput(
+            label="رابط الصورة",
+            placeholder="https://example.com/image.png",
+            required=False,
+            max_length=1000
+        )
+
+        self.add_item(
+            self.title_input
+        )
+
+        self.add_item(
+            self.description_input
+        )
+
+        self.add_item(
+            self.image_input
+        )
+
+    async def on_submit(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        self.builder.data["title"] = str(
+            self.title_input.value
+        )
+
+        self.builder.data["description"] = str(
+            self.description_input.value
+        )
+
+        self.builder.data["image"] = str(
+            self.image_input.value
+        )
+
         await interaction.response.send_message(
-            embed=embed,
+            "🎨 **اختر لون البانل:**",
+            view=PanelColorView(
+                self.builder
+            ),
             ephemeral=True
         )
 
 
-@bot.tree.command(
-    name="panel",
-    description="إنشاء بانل عام"
-)
-@app_commands.checks.has_permissions(administrator=True)
-async def panel(
-    interaction: discord.Interaction,
-    channel: discord.TextChannel,
-    description: str,
-    button_name: str,
-    button_emoji: str,
-    button_description: str,
-    image: str = None
+# ==================================
+# اختيار لون البانل
+# ==================================
+
+class PanelColorSelect(discord.ui.Select):
+
+    def __init__(self, builder):
+
+        options = []
+
+        for name in PANEL_COLORS:
+
+            options.append(
+                discord.SelectOption(
+                    label=name,
+                    value=name
+                )
+            )
+
+        super().__init__(
+            placeholder="اختر لون البانل",
+            options=options
+        )
+
+        self.builder = builder
+
+    async def callback(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        self.builder.data["color"] = self.values[0]
+
+        await interaction.response.send_message(
+            "🔘 **هل تريد إضافة أزرار للبانل؟**",
+            view=YesNoMainButtonsView(
+                self.builder
+            ),
+            ephemeral=True
+        )
+
+
+class PanelColorView(discord.ui.View):
+
+    def __init__(self, builder):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.add_item(
+            PanelColorSelect(builder)
+        )
+
+
+# ==================================
+# نعم / لا للأزرار الرئيسية
+# ==================================
+
+class YesNoMainButtonsView(discord.ui.View):
+
+    def __init__(self, builder):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+
+    @discord.ui.button(
+        label="نعم",
+        emoji="✅",
+        style=discord.ButtonStyle.green
+    )
+    async def yes(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_message(
+            "🔢 **كم زر تريد؟**",
+            view=ButtonCountView(
+                self.builder,
+                main=True
+            ),
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="لا",
+        emoji="❌",
+        style=discord.ButtonStyle.red
+    )
+    async def no(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        self.builder.data["buttons"] = []
+
+        await publish_built_panel(
+            interaction,
+            self.builder
+        )
+
+
+# ==================================
+# عدد الأزرار
+# ==================================
+
+class ButtonCountSelect(discord.ui.Select):
+
+    def __init__(
+        self,
+        builder,
+        main=True,
+        parent_index=None
+    ):
+
+        options = []
+
+        for number in range(0, 9):
+
+            options.append(
+                discord.SelectOption(
+                    label=f"{number} زر",
+                    value=str(number)
+                )
+            )
+
+        super().__init__(
+            placeholder="اختر عدد الأزرار",
+            options=options
+        )
+
+        self.builder = builder
+        self.main = main
+        self.parent_index = parent_index
+
+    async def callback(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        count = int(
+            self.values[0]
+        )
+
+        # ==============================
+        # أزرار البانل الرئيسي
+        # ==============================
+
+        if self.main:
+
+            self.builder.data["buttons"] = []
+
+            for i in range(count):
+
+                self.builder.data["buttons"].append({
+                    "label": "",
+                    "emoji": "",
+                    "panel": {
+                        "title": "",
+                        "description": "",
+                        "image": "",
+                        "color": "أزرق",
+                        "buttons": []
+                    }
+                })
+
+            if count == 0:
+
+                await publish_built_panel(
+                    interaction,
+                    self.builder
+                )
+
+                return
+
+            self.builder.current_button = 0
+
+            await interaction.response.send_message(
+                f"📝 **اسم الزر 1 من {count}**\n"
+                f"اكتب اسم الزر:",
+                ephemeral=True
+            )
+
+            await interaction.followup.send(
+                "اضغط الزر التالي لكتابة اسم الزر:",
+                view=ButtonNameStartView(
+                    self.builder,
+                    0
+                ),
+                ephemeral=True
+            )
+
+        # ==============================
+        # أزرار داخل بانل الزر
+        # ==============================
+
+        else:
+
+            parent = self.builder.data[
+                "buttons"
+            ][self.parent_index]
+
+            parent["panel"]["buttons"] = []
+
+            for i in range(count):
+
+                parent["panel"]["buttons"].append({
+                    "label": "",
+                    "emoji": ""
+                })
+
+            if count == 0:
+
+                await finish_main_button(
+                    interaction,
+                    self.builder,
+                    self.parent_index
+                )
+
+                return
+
+            self.builder.current_inner_button = 0
+
+            await interaction.response.send_message(
+                f"📝 **اسم الزر الداخلي 1 من {count}**",
+                view=InnerButtonNameView(
+                    self.builder,
+                    self.parent_index,
+                    0
+                ),
+                ephemeral=True
+            )
+
+
+class ButtonCountView(discord.ui.View):
+
+    def __init__(
+        self,
+        builder,
+        main=True,
+        parent_index=None
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.add_item(
+            ButtonCountSelect(
+                builder,
+                main,
+                parent_index
+            )
+        )
+
+
+# ==================================
+# إدخال اسم الزر
+# ==================================
+
+class ButtonNameModal(discord.ui.Modal):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            title=f"اسم الزر {index + 1}"
+        )
+
+        self.builder = builder
+        self.index = index
+
+        self.name_input = discord.ui.TextInput(
+            label="اسم الزر",
+            placeholder="مثال: التقديم",
+            required=True,
+            max_length=80
+        )
+
+        self.add_item(
+            self.name_input
+        )
+
+    async def on_submit(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        self.builder.data["buttons"][
+            self.index
+        ]["label"] = str(
+            self.name_input.value
+        )
+
+        await interaction.response.send_message(
+            f"😀 **إيموجي الزر {self.index + 1}**\n"
+            f"اكتب الإيموجي في الرسالة التالية.",
+            view=EmojiInputView(
+                self.builder,
+                self.index
+            ),
+            ephemeral=True
+        )
+
+
+class ButtonNameStartView(discord.ui.View):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+        self.index = index
+
+    @discord.ui.button(
+        label="كتابة اسم الزر",
+        emoji="✏️",
+        style=discord.ButtonStyle.primary
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_modal(
+            ButtonNameModal(
+                self.builder,
+                self.index
+            )
+        )
+
+
+# ==================================
+# إيموجي الزر
+# ==================================
+
+class EmojiInputModal(discord.ui.Modal):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            title=f"إيموجي الزر {index + 1}"
+        )
+
+        self.builder = builder
+        self.index = index
+
+        self.emoji_input = discord.ui.TextInput(
+            label="الإيموجي",
+            placeholder="مثال: 🎫",
+            required=False,
+            max_length=100
+        )
+
+        self.add_item(
+            self.emoji_input
+        )
+
+    async def on_submit(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        emoji = str(
+            self.emoji_input.value
+        ).strip()
+
+        self.builder.data["buttons"][
+            self.index
+        ]["emoji"] = emoji
+
+        await start_button_panel_setup(
+            interaction,
+            self.builder,
+            self.index
+        )
+
+
+class EmojiInputView(discord.ui.View):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+        self.index = index
+
+    @discord.ui.button(
+        label="كتابة الإيموجي",
+        emoji="😀",
+        style=discord.ButtonStyle.primary
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_modal(
+            EmojiInputModal(
+                self.builder,
+                self.index
+            )
+        )
+
+
+# ==================================
+# بداية إعداد بانل الزر
+# ==================================
+
+async def start_button_panel_setup(
+    interaction,
+    builder,
+    index
 ):
-    embed = discord.Embed(
-        title="📌 Panel",
-        description=description,
-        color=discord.Color.blurple()
-    )
 
-    if image:
-        embed.set_image(url=image)
-
-    view = GeneralPanelView(
-        button_name,
-        button_emoji,
-        button_description
-    )
-
-    msg = await channel.send(
-        embed=embed,
-        view=view
-    )
-
-    general_panels.append({
-        "guild_id": interaction.guild.id,
-        "channel_id": channel.id,
-        "message_id": msg.id,
-        "button_name": button_name,
-        "button_emoji": button_emoji,
-        "button_description": button_description
-    })
-
-    save_general_panels()
+    button_number = index + 1
 
     await interaction.response.send_message(
-        "✅ تم إنشاء البانل وحفظه بنجاح",
+        f"📋 **إعداد بانل الزر {button_number}**\n\n"
+        f"أدخل العنوان والوصف ورابط الصورة:",
+        view=ButtonPanelInfoView(
+            builder,
+            index
+        ),
         ephemeral=True
     )
 
-def save_persistent():
-    save_json(PANELS_FILE, persistent_panels)
 
-def save_application_types():
-    save_json(APPLICATION_TYPES_FILE, application_types)
+# ==================================
+# معلومات بانل الزر
+# ==================================
 
-def save_all_applications():
-    save_json(APPLICATIONS_FILE, applications_data)
-    save_json(APPLICATION_CONFIG_FILE, application_config)
-    save_json(APPLICATION_TYPES_FILE, application_types)
-    save_json(APPLICATION_QUESTIONS_FILE, application_questions)
-    save_json(APPLICATION_DECISIONS_FILE, application_decisions)
-    save_json(APPLICATION_COOLDOWN_FILE, application_cooldowns)
+class ButtonPanelInfoModal(discord.ui.Modal):
 
-def save_member_count(data):
-    save_json(MEMBER_COUNT_FILE, data)
+    def __init__(
+        self,
+        builder,
+        index
+    ):
 
-def load_member_count():
-    return load_json(MEMBER_COUNT_FILE, {})
+        super().__init__(
+            title=f"بانل الزر {index + 1}"
+        )
 
-def save_suggestions_config():
-    save_json(SUGGESTION_CONFIG_FILE, suggestion_config)
+        self.builder = builder
+        self.index = index
+
+        self.title_input = discord.ui.TextInput(
+            label="عنوان",
+            required=False,
+            max_length=256
+        )
+
+        self.description_input = discord.ui.TextInput(
+            label="وصف",
+            required=False,
+            style=discord.TextStyle.paragraph,
+            max_length=4000
+        )
+
+        self.image_input = discord.ui.TextInput(
+            label="رابط الصورة",
+            required=False,
+            max_length=1000
+        )
+
+        self.add_item(
+            self.title_input
+        )
+
+        self.add_item(
+            self.description_input
+        )
+
+        self.add_item(
+            self.image_input
+        )
+
+    async def on_submit(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        panel = self.builder.data[
+            "buttons"
+        ][self.index]["panel"]
+
+        panel["title"] = str(
+            self.title_input.value
+        )
+
+        panel["description"] = str(
+            self.description_input.value
+        )
+
+        panel["image"] = str(
+            self.image_input.value
+        )
+
+        await interaction.response.send_message(
+            "🎨 **اختر لون بانل هذا الزر:**",
+            view=ButtonPanelColorView(
+                self.builder,
+                self.index
+            ),
+            ephemeral=True
+        )
+
+
+class ButtonPanelInfoView(discord.ui.View):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+        self.index = index
+
+    @discord.ui.button(
+        label="إدخال المعلومات",
+        emoji="📝",
+        style=discord.ButtonStyle.primary
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_modal(
+            ButtonPanelInfoModal(
+                self.builder,
+                self.index
+            )
+        )
+
+
+# ==================================
+# لون بانل الزر
+# ==================================
+
+class ButtonPanelColorSelect(
+    discord.ui.Select
+):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        options = [
+            discord.SelectOption(
+                label=name,
+                value=name
+            )
+            for name in PANEL_COLORS
+        ]
+
+        super().__init__(
+            placeholder="اختر اللون",
+            options=options
+        )
+
+        self.builder = builder
+        self.index = index
+
+    async def callback(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        panel = self.builder.data[
+            "buttons"
+        ][self.index]["panel"]
+
+        panel["color"] = self.values[0]
+
+        await interaction.response.send_message(
+            "🔘 **هل تريد أزرار داخل هذا البانل؟**",
+            view=InnerButtonsYesNoView(
+                self.builder,
+                self.index
+            ),
+            ephemeral=True
+        )
+
+
+class ButtonPanelColorView(discord.ui.View):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.add_item(
+            ButtonPanelColorSelect(
+                builder,
+                index
+            )
+        )
+
+
+# ==================================
+# نعم / لا للأزرار الداخلية
+# ==================================
+
+class InnerButtonsYesNoView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        builder,
+        index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+        self.index = index
+
+    @discord.ui.button(
+        label="نعم",
+        emoji="✅",
+        style=discord.ButtonStyle.green
+    )
+    async def yes(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_message(
+            "🔢 **كم زر تريد داخل هذا البانل؟**",
+            view=ButtonCountView(
+                self.builder,
+                main=False,
+                parent_index=self.index
+            ),
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="لا",
+        emoji="❌",
+        style=discord.ButtonStyle.red
+    )
+    async def no(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await finish_main_button(
+            interaction,
+            self.builder,
+            self.index
+        )
+
+
+# ==================================
+# إنهاء الزر الحالي والانتقال للي بعده
+# ==================================
+
+async def finish_main_button(
+    interaction,
+    builder,
+    index
+):
+
+    total = len(
+        builder.data["buttons"]
+    )
+
+    next_index = index + 1
+
+    if next_index < total:
+
+        builder.current_button = next_index
+
+        await interaction.response.send_message(
+            f"✅ تم الانتهاء من إعداد **الزر {index + 1}**.\n\n"
+            f"➡️ الآن ننتقل إلى **الزر {next_index + 1} من {total}**.",
+            view=ButtonNameStartView(
+                builder,
+                next_index
+            ),
+            ephemeral=True
+        )
+
+    else:
+
+        await publish_built_panel(
+            interaction,
+            builder
+        )
+
+
+# ==================================
+# الأزرار الداخلية
+# ==================================
+
+class InnerButtonNameView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        builder,
+        parent_index,
+        inner_index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+        self.parent_index = parent_index
+        self.inner_index = inner_index
+
+    @discord.ui.button(
+        label="كتابة اسم الزر",
+        emoji="✏️",
+        style=discord.ButtonStyle.primary
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_modal(
+            InnerButtonNameModal(
+                self.builder,
+                self.parent_index,
+                self.inner_index
+            )
+        )
+
+
+class InnerButtonNameModal(
+    discord.ui.Modal
+):
+
+    def __init__(
+        self,
+        builder,
+        parent_index,
+        inner_index
+    ):
+
+        super().__init__(
+            title=f"اسم الزر الداخلي {inner_index + 1}"
+        )
+
+        self.builder = builder
+        self.parent_index = parent_index
+        self.inner_index = inner_index
+
+        self.name_input = discord.ui.TextInput(
+            label="اسم الزر",
+            required=True,
+            max_length=80
+        )
+
+        self.add_item(
+            self.name_input
+        )
+
+    async def on_submit(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        inner = self.builder.data[
+            "buttons"
+        ][self.parent_index][
+            "panel"
+        ]["buttons"][self.inner_index]
+
+        inner["label"] = str(
+            self.name_input.value
+        )
+
+        await interaction.response.send_message(
+            "😀 **إيموجي الزر:**",
+            view=InnerEmojiView(
+                self.builder,
+                self.parent_index,
+                self.inner_index
+            ),
+            ephemeral=True
+        )
+
+
+class InnerEmojiView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        builder,
+        parent_index,
+        inner_index
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+        self.parent_index = parent_index
+        self.inner_index = inner_index
+
+    @discord.ui.button(
+        label="كتابة الإيموجي",
+        emoji="😀",
+        style=discord.ButtonStyle.primary
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_modal(
+            InnerEmojiModal(
+                self.builder,
+                self.parent_index,
+                self.inner_index
+            )
+        )
+
+
+class InnerEmojiModal(
+    discord.ui.Modal
+):
+
+    def __init__(
+        self,
+        builder,
+        parent_index,
+        inner_index
+    ):
+
+        super().__init__(
+            title=f"إيموجي الزر الداخلي {inner_index + 1}"
+        )
+
+        self.builder = builder
+        self.parent_index = parent_index
+        self.inner_index = inner_index
+
+        self.emoji_input = discord.ui.TextInput(
+            label="الإيموجي",
+            required=False,
+            max_length=100
+        )
+
+        self.add_item(
+            self.emoji_input
+        )
+
+    async def on_submit(self, interaction):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        inner = self.builder.data[
+            "buttons"
+        ][self.parent_index][
+            "panel"
+        ]["buttons"][self.inner_index]
+
+        inner["emoji"] = str(
+            self.emoji_input.value
+        ).strip()
+
+        total = len(
+            self.builder.data[
+                "buttons"
+            ][self.parent_index][
+                "panel"
+            ]["buttons"]
+        )
+
+        next_inner = self.inner_index + 1
+
+        if next_inner < total:
+
+            await interaction.response.send_message(
+                f"➡️ الآن **الزر الداخلي {next_inner + 1} من {total}**",
+                view=InnerButtonNameView(
+                    self.builder,
+                    self.parent_index,
+                    next_inner
+                ),
+                ephemeral=True
+            )
+
+        else:
+
+            await finish_main_button(
+                interaction,
+                self.builder,
+                self.parent_index
+            )
+
+
+# ==================================
+# View النهائي للبانل الرئيسي
+# ==================================
+
+class BuiltPanelView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        panel_id
+    ):
+
+        super().__init__(
+            timeout=None
+        )
+
+        self.panel_id = str(
+            panel_id
+        )
+
+        panel = None
+
+        for p in general_panels:
+
+            if str(p.get("id")) == self.panel_id:
+                panel = p
+                break
+
+        if not panel:
+            return
+
+        for index, button_data in enumerate(
+            panel.get("buttons", [])
+        ):
+
+            if not button_data:
+                continue
+
+            label = button_data.get(
+                "label",
+                f"زر {index + 1}"
+            )
+
+            emoji = button_data.get(
+                "emoji"
+            )
+
+            button = discord.ui.Button(
+                label=label[:80],
+                style=discord.ButtonStyle.primary,
+                custom_id=(
+                    f"general_panel_main_"
+                    f"{self.panel_id}_{index}"
+                )
+            )
+
+            if emoji:
+                try:
+                    button.emoji = emoji
+                except:
+                    pass
+
+            button.callback = self.make_callback(
+                index
+            )
+
+            self.add_item(button)
+
+    def make_callback(self, index):
+
+        async def callback(
+            interaction
+        ):
+
+            panel = None
+
+            for p in general_panels:
+
+                if str(p.get("id")) == self.panel_id:
+                    panel = p
+                    break
+
+            if not panel:
+                await interaction.response.send_message(
+                    "❌ البانل غير موجود.",
+                    ephemeral=True
+                )
+                return
+
+            buttons = panel.get(
+                "buttons",
+                []
+            )
+
+            if index >= len(buttons):
+                await interaction.response.send_message(
+                    "❌ الزر غير موجود.",
+                    ephemeral=True
+                )
+                return
+
+            button_data = buttons[index]
+
+            button_panel = button_data.get(
+                "panel",
+                {}
+            )
+
+            embed = build_panel_embed(
+                button_panel
+            )
+
+            inner_view = BuiltInnerView(
+                self.panel_id,
+                index
+            )
+
+            if len(inner_view.children) > 0:
+
+                await interaction.response.send_message(
+                    embed=embed,
+                    view=inner_view,
+                    ephemeral=True
+                )
+
+            else:
+
+                await interaction.response.send_message(
+                    embed=embed,
+                    ephemeral=True
+                )
+
+        return callback
+
+
+# ==================================
+# View الأزرار الداخلية
+# ==================================
+
+class BuiltInnerView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        panel_id,
+        parent_index
+    ):
+
+        super().__init__(
+            timeout=None
+        )
+
+        panel = None
+
+        for p in general_panels:
+
+            if str(p.get("id")) == str(panel_id):
+                panel = p
+                break
+
+        if not panel:
+            return
+
+        buttons = panel.get(
+            "buttons",
+            []
+        )
+
+        if parent_index >= len(buttons):
+            return
+
+        inner_buttons = buttons[
+            parent_index
+        ].get(
+            "panel",
+            {}
+        ).get(
+            "buttons",
+            []
+        )
+
+        for index, data in enumerate(
+            inner_buttons
+        ):
+
+            button = discord.ui.Button(
+                label=data.get(
+                    "label",
+                    f"زر {index + 1}"
+                )[:80],
+                style=discord.ButtonStyle.secondary,
+                custom_id=(
+                    f"general_panel_inner_"
+                    f"{panel_id}_{parent_index}_{index}"
+                )
+            )
+
+            emoji = data.get(
+                "emoji"
+            )
+
+            if emoji:
+                try:
+                    button.emoji = emoji
+                except:
+                    pass
+
+            button.callback = self.make_callback(
+                panel_id,
+                parent_index,
+                index
+            )
+
+            self.add_item(button)
+
+    def make_callback(
+        self,
+        panel_id,
+        parent_index,
+        index
+    ):
+
+        async def callback(
+            interaction
+        ):
+
+            panel = None
+
+            for p in general_panels:
+
+                if str(p.get("id")) == str(panel_id):
+                    panel = p
+                    break
+
+            if not panel:
+                await interaction.response.send_message(
+                    "❌ البانل غير موجود.",
+                    ephemeral=True
+                )
+                return
+
+            try:
+
+                data = panel[
+                    "buttons"
+                ][parent_index][
+                    "panel"
+                ]["buttons"][index]
+
+            except:
+                await interaction.response.send_message(
+                    "❌ الزر غير موجود.",
+                    ephemeral=True
+                )
+                return
+
+            await interaction.response.send_message(
+                f"🔘 **{data.get('label', 'زر')}**",
+                ephemeral=True
+            )
+
+        return callback
+
+
+# ==================================
+# إرسال البانل النهائي
+# ==================================
+
+async def publish_built_panel(
+    interaction,
+    builder
+):
+
+    panel_id = (
+        int(time.time() * 1000)
+    )
+
+    panel_data = {
+        "id": panel_id,
+        "guild_id": interaction.guild.id,
+        "channel_id": interaction.channel.id,
+        "message_id": None,
+        "title": builder.data.get(
+            "title",
+            ""
+        ),
+        "description": builder.data.get(
+            "description",
+            ""
+        ),
+        "image": builder.data.get(
+            "image",
+            ""
+        ),
+        "color": builder.data.get(
+            "color",
+            "أزرق"
+        ),
+        "buttons": builder.data.get(
+            "buttons",
+            []
+        )
+    }
+
+    embed = build_panel_embed(
+        panel_data
+    )
+
+    view = BuiltPanelView(
+        panel_id
+    )
+
+    # نخزن أولًا حتى BuiltPanelView يقدر يقرأ البيانات
+    general_panels.append(
+        panel_data
+    )
+
+    save_general_panels()
+
+    try:
+
+        message = await interaction.channel.send(
+            embed=embed,
+            view=view if len(view.children) else None
+        )
+
+        panel_data["message_id"] = message.id
+
+        save_general_panels()
+
+    except Exception as e:
+
+        print(
+            f"Panel send error: {e}"
+        )
+
+        try:
+            await interaction.followup.send(
+                "❌ حدث خطأ أثناء إرسال البانل.",
+                ephemeral=True
+            )
+        except:
+            pass
+
+        return
+
+    try:
+
+        await interaction.response.send_message(
+            "✅ **تم إنشاء البانل بنجاح!**",
+            ephemeral=True
+        )
+
+    except discord.InteractionResponded:
+
+        await interaction.followup.send(
+            "✅ **تم إنشاء البانل بنجاح!**",
+            ephemeral=True
+        )
+
+
+# ==================================
+# /panel
+# ==================================
+
+@bot.tree.command(
+    name="panel",
+    description="إنشاء بانل تفاعلي متكامل"
+)
+@app_commands.checks.has_permissions(
+    administrator=True
+)
+async def panel(
+    interaction: discord.Interaction
+):
+
+    builder = PanelBuilder(
+        interaction.user.id
+    )
+
+    embed = discord.Embed(
+        title="🎨 منشئ البانلات",
+        description=(
+            "اضغط الزر بالأسفل لبدء إنشاء البانل.\n\n"
+            "🔒 **جميع خطوات الإعداد خاصة بك.**"
+        ),
+        color=discord.Color.blurple()
+    )
+
+    await interaction.response.send_message(
+        embed=embed,
+        view=PanelStartView(
+            builder
+        ),
+        ephemeral=True
+    )
+
+
+# ==================================
+# بداية إنشاء البانل
+# ==================================
+
+class PanelStartView(
+    discord.ui.View
+):
+
+    def __init__(
+        self,
+        builder
+    ):
+
+        super().__init__(
+            timeout=600
+        )
+
+        self.builder = builder
+
+    @discord.ui.button(
+        label="إنشاء بانل",
+        emoji="🎨",
+        style=discord.ButtonStyle.primary
+    )
+    async def start(
+        self,
+        interaction,
+        button
+    ):
+
+        if not panel_owner(
+            interaction,
+            self.builder
+        ):
+            return
+
+        await interaction.response.send_modal(
+            MainPanelModal(
+                self.builder
+            )
+        )
+
+
+# ==================================
+# Persistent Panels
+# ==================================
+
+async def restore_general_panels():
+
+    for panel in general_panels:
+
+        try:
+
+            message_id = panel.get(
+                "message_id"
+            )
+
+            if not message_id:
+                continue
+
+            bot.add_view(
+                BuiltPanelView(
+                    panel.get("id")
+                ),
+                message_id=message_id
+            )
+
+        except Exception as e:
+
+            print(
+                f"Failed to restore general panel: {e}"
+            )
 
 # ==================================
 # نظام السجلات (Logs System)
@@ -2233,6 +3789,8 @@ async def help_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"🤖 Bot Online: {bot.user}")
+    
+    # الأنظمة القديمة عندك
     for panel in persistent_panels:
         try:
             ptype = panel.get("type")
@@ -2243,18 +3801,8 @@ async def on_ready():
         except Exception as e:
             print(f"Failed persistent view: {e}")
             
-    for panel in general_panels:
-        try:
-            bot.add_view(
-                GeneralPanelView(
-                    panel["button_name"],
-                    panel["button_emoji"],
-                    panel["button_description"]
-                ),
-                message_id=panel["message_id"]
-            )
-        except Exception as e:
-            print(e)
+    # استعادة البانلات العامة الجديدة
+    await restore_general_panels()
             
     try:
         await bot.tree.sync()
