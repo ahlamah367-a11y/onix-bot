@@ -429,7 +429,7 @@ class GeneralPanelButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         data = general_panels
-        panel = next((p for p in data if p.get("id") == self.panel_id), None)
+        panel = next((p for p in data if isinstance(p, dict) and p.get("id") == self.panel_id), None)
 
         if not panel:
             await interaction.response.send_message("❌ هذا البانل لم يعد موجودًا.", ephemeral=True)
@@ -564,15 +564,6 @@ class GeneralPanelModal(discord.ui.Modal):
 async def general_panel(interaction: discord.Interaction, buttons: app_commands.Choice[int]):
     await interaction.response.send_modal(GeneralPanelModal(buttons.value))
 
-
-async def restore_general_panels():
-    for panel in general_panels:
-        try:
-            if isinstance(panel, dict) and "id" in panel:
-                view = GeneralPanelView(panel)
-                bot.add_view(view)
-        except Exception as e:
-            print(f"❌ Failed to restore general panel {panel.get('id')}: {e}")
 
 # ==================================
 # البانل السريع (Single-Button Panel)
@@ -1724,7 +1715,6 @@ async def suggestion_setup(interaction: discord.Interaction, channel: discord.Te
     await interaction.response.send_message(f"✅ تم تعيين روم الاقتراحات {channel.mention}", ephemeral=True)
 
 @bot.tree.command(name="suggest", description="إرسال اقتراح")
-@app_commands.checks.has_permissions(manage_messages=True)
 async def suggest(interaction: discord.Interaction, suggestion: str):
     channel_id = suggestion_config.get(str(interaction.guild.id))
     if not channel_id:
@@ -1851,37 +1841,33 @@ async def on_ready():
     print(f"🤖 Bot Online: {bot.user}")
 
     # استعادة البانلات المعتادة للتقديمات والتفاعل
-    for panel in persistent_panels:
+    for panel_item in persistent_panels:
         try:
-            ptype = panel.get("type")
+            ptype = panel_item.get("type")
             if ptype == "application":
-                bot.add_view(ApplicationSelectView(panel["guild_id"]), message_id=panel["message_id"])
+                bot.add_view(ApplicationSelectView(panel_item["guild_id"]), message_id=panel_item["message_id"])
             elif ptype == "reaction_role":
-                bot.add_view(ReactionRoleView(panel["role_id"]), message_id=panel["message_id"])
+                bot.add_view(ReactionRoleView(panel_item["role_id"]), message_id=panel_item["message_id"])
         except Exception as e:
             print(f"Failed persistent view: {e}")
 
-    # استعادة البانلات العامة القديمة
-    for panel in general_panels:
+    # استعادة البانلات العامة (القديمة والديناميكية)
+    for panel_item in general_panels:
         try:
-            if isinstance(panel, dict) and "button_name" in panel:
-                bot.add_view(
-                    LegacyGeneralPanelView(
-                        panel["button_name"],
-                        panel["button_emoji"],
-                        panel["button_description"]
-                    ),
-                    message_id=panel.get("message_id")
-                )
+            if isinstance(panel_item, dict):
+                if "button_name" in panel_item:
+                    bot.add_view(
+                        LegacyGeneralPanelView(
+                            panel_item["button_name"],
+                            panel_item["button_emoji"],
+                            panel_item["button_description"]
+                        ),
+                        message_id=panel_item.get("message_id")
+                    )
+                elif "id" in panel_item and "buttons" in panel_item:
+                    bot.add_view(GeneralPanelView(panel_item))
         except Exception as e:
-            print(f"Failed legacy panel view: {e}")
-
-    # استعادة البانلات العامة الديناميكية الجديدة
-    try:
-        await restore_general_panels()
-        print(f"✅ Restored {len(general_panels)} general panels.")
-    except Exception as e:
-        print(f"Error restoring general panels: {e}")
+            print(f"Failed panel view restoration: {e}")
 
     # المزامنة مع سيرفرات الديسكورد
     try:
