@@ -1,6 +1,16 @@
 import os
-from flask import Flask
+import json
+import asyncio
+import random
+import time
+import re
 import threading
+from datetime import datetime, timedelta, timezone
+from flask import Flask
+
+import discord
+from discord.ext import commands
+from discord import app_commands
 
 # --- إعداد خادم الويب الوهمي لإرضاء منصة Render ---
 app = Flask(__name__)
@@ -16,17 +26,6 @@ def run_flask():
 # تشغيل السيرفر في خلفية البوت
 threading.Thread(target=run_flask, daemon=True).start()
 # ---------------------------------------------
-
-import discord
-from discord.ext import commands
-from discord import app_commands
-
-import json
-from datetime import datetime, timedelta
-import asyncio
-import random
-import time
-import re
 
 # ==================================
 # إعداد البوت
@@ -100,7 +99,7 @@ def save_json(filename, data):
 def save_error(error):
     logs = load_json(ERROR_LOG_FILE, [])
     logs.append({
-        "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+        "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         "error": str(error)
     })
     save_json(ERROR_LOG_FILE, logs)
@@ -215,7 +214,7 @@ async def handle_afk_message(message):
                     f"⏱️ **مدة الغياب:** `{format_afk_duration(duration)}`"
                 ),
                 color=discord.Color.green(),
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
             embed.set_thumbnail(url=message.author.display_avatar.url)
             embed.set_footer(text="تم إلغاء حالة AFK تلقائيًا")
@@ -245,7 +244,7 @@ async def handle_afk_message(message):
                 f"⏱️ **منذ:** `{format_afk_duration(duration)}`"
             ),
             color=discord.Color.orange(),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.set_footer(text="قد يكون العضو غير متواجد حاليًا")
@@ -280,7 +279,7 @@ async def afk(interaction: discord.Interaction, reason: str = "غير متوفر
     guild_data[user_id] = {
         "reason": reason,
         "started_at": now,
-        "started_at_text": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        "started_at_text": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     }
     save_afk()
 
@@ -294,7 +293,7 @@ async def afk(interaction: discord.Interaction, reason: str = "غير متوفر
             f"📌 سيتم إلغاء AFK تلقائيًا عند إرسال رسالة."
         ),
         color=discord.Color.blurple(),
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     embed.set_thumbnail(url=interaction.user.display_avatar.url)
     embed.set_footer(text=f"AFK • {interaction.guild.name}")
@@ -373,7 +372,7 @@ async def afk_list(interaction: discord.Interaction):
         title="💤 أعضاء AFK",
         description=text,
         color=discord.Color.orange(),
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     embed.set_footer(text=f"إجمالي AFK: {len(lines)}")
     await interaction.response.send_message(embed=embed)
@@ -404,7 +403,7 @@ async def afk_remove(interaction: discord.Interaction, member: discord.Member):
             f"👮 **بواسطة:** {interaction.user.mention}"
         ),
         color=discord.Color.green(),
-        timestamp=datetime.utcnow()
+        timestamp=datetime.now(timezone.utc)
     )
     await interaction.response.send_message(embed=embed)
 
@@ -445,7 +444,7 @@ class GeneralPanelButton(discord.ui.Button):
             title=button.get("title", "بدون عنوان"),
             description=button.get("description", "بدون وصف"),
             color=discord.Color.blurple(),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(timezone.utc)
         )
 
         for field in button.get("fields", []):
@@ -463,6 +462,21 @@ class GeneralPanelView(discord.ui.View):
         panel_id = panel.get("id")
         for button_data in panel.get("buttons", []):
             self.add_item(GeneralPanelButton(panel_id, button_data))
+
+
+class OpenNextModalView(discord.ui.View):
+    def __init__(self, panel_data, current_button, total_buttons):
+        super().__init__(timeout=180)
+        self.panel_data = panel_data
+        self.current_button = current_button
+        self.total_buttons = total_buttons
+
+    @discord.ui.button(label="⚙️ متابعة إعداد الأزرار", style=discord.ButtonStyle.primary)
+    async def open_modal_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(
+            GeneralButtonModal(self.panel_data, self.current_button, self.total_buttons)
+        )
+        self.stop()
 
 
 class GeneralButtonModal(discord.ui.Modal):
@@ -501,7 +515,11 @@ class GeneralButtonModal(discord.ui.Modal):
 
         if len(self.panel_data["buttons"]) < self.total_buttons:
             next_number = len(self.panel_data["buttons"]) + 1
-            await interaction.response.send_modal(GeneralButtonModal(self.panel_data, next_number, self.total_buttons))
+            await interaction.response.send_message(
+                f"✅ تم حفظ بيانات الزر {self.button_number}. اضغط للبدء في الزر {next_number}:",
+                view=OpenNextModalView(self.panel_data, next_number, self.total_buttons),
+                ephemeral=True
+            )
             return
 
         panel_id = str(random.randint(100000000, 999999999))
@@ -546,7 +564,11 @@ class GeneralPanelModal(discord.ui.Modal):
             "description": self.panel_description.value,
             "buttons": []
         }
-        await interaction.response.send_modal(GeneralButtonModal(panel_data, 1, self.button_count))
+        await interaction.response.send_message(
+            "✅ تم حفظ تفاصيل البانل! اضغط الزر أدناه للبدء بتعيين إعدادات الأزرار:",
+            view=OpenNextModalView(panel_data, 1, self.button_count),
+            ephemeral=True
+        )
 
 
 @bot.tree.command(name="general-panel", description="إنشاء بانل عام بأزرار قابلة للتخصيص")
@@ -634,7 +656,7 @@ async def send_log(guild, title, description, color):
     if log_channel_id:
         channel = guild.get_channel(log_channel_id)
         if channel:
-            embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.utcnow())
+            embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now(timezone.utc))
             try:
                 await channel.send(embed=embed)
             except Exception:
@@ -794,7 +816,7 @@ async def on_member_join(member):
                                           .replace("{username}", member.name)\
                                           .replace("{server}", guild.name)
 
-            embed = discord.Embed(title="👋 عضو جديد!", description=formatted_message, color=discord.Color.green(), timestamp=datetime.utcnow())
+            embed = discord.Embed(title="👋 عضو جديد!", description=formatted_message, color=discord.Color.green(), timestamp=datetime.now(timezone.utc))
             embed.set_thumbnail(url=member.display_avatar.url)
             try:
                 await channel.send(content=member.mention if show_user else None, embed=embed)
@@ -1022,7 +1044,7 @@ class ApplyModal(discord.ui.Modal):
             "type": self.app_type,
             "answers": answers,
             "status": "pending",
-            "time": datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+            "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         })
 
         save_all_applications()
@@ -1032,7 +1054,7 @@ class ApplyModal(discord.ui.Modal):
         result_channel = interaction.guild.get_channel(result_channel_id) if result_channel_id else None
 
         if result_channel:
-            embed = discord.Embed(title="📩 تقديم جديد", color=discord.Color.blue(), timestamp=datetime.utcnow())
+            embed = discord.Embed(title="📩 تقديم جديد", color=discord.Color.blue(), timestamp=datetime.now(timezone.utc))
             embed.add_field(name="👤 العضو", value=interaction.user.mention, inline=False)
             embed.add_field(name="📌 النوع", value=self.app_type, inline=False)
 
@@ -1051,15 +1073,29 @@ class ApplyModal(discord.ui.Modal):
 
 
 class ApplicationControlView(discord.ui.View):
-    def __init__(self, user_id, app_id):
+    def __init__(self, user_id: int = 0, app_id: int = 0):
         super().__init__(timeout=None)
         self.user_id = user_id
         self.app_id = app_id
 
-    @discord.ui.button(label="قبول", emoji="✅", style=discord.ButtonStyle.green, custom_id="application_accept")
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # تعيين معرفات ديناميكية ثابته لتعمل حتى بعد إعادة تشغيل البوت
+        if app_id and user_id:
+            self.accept_btn.custom_id = f"app_accept:{app_id}:{user_id}"
+            self.reject_btn.custom_id = f"app_reject:{app_id}:{user_id}"
+
+    @discord.ui.button(label="قبول", emoji="✅", style=discord.ButtonStyle.green, custom_id="app_accept_default")
+    async def accept_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # استخراج البيانات من custom_id إذا أعيد تشغيل البوت
+        parts = button.custom_id.split(":")
+        if len(parts) == 3:
+            app_id = int(parts[1])
+            user_id = int(parts[2])
+        else:
+            app_id = self.app_id
+            user_id = self.user_id
+
         gid = str(interaction.guild.id)
-        application = next((app for app in applications_data.get(gid, []) if app.get("id") == self.app_id), None)
+        application = next((app for app in applications_data.get(gid, []) if app.get("id") == app_id), None)
 
         if not application:
             await interaction.response.send_message("❌ لم يتم العثور على التقديم.", ephemeral=True)
@@ -1071,10 +1107,10 @@ class ApplicationControlView(discord.ui.View):
 
         application["status"] = "accepted"
         application["decision_by"] = interaction.user.id
-        application["decision_time"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        application["decision_time"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         save_all_applications()
 
-        member = interaction.guild.get_member(self.user_id)
+        member = interaction.guild.get_member(user_id)
         app_type = application.get("type")
 
         if member:
@@ -1122,10 +1158,18 @@ class ApplicationControlView(discord.ui.View):
 
         await interaction.response.send_message("✅ تم قبول التقديم وتحديث البانل.", ephemeral=True)
 
-    @discord.ui.button(label="رفض", emoji="❌", style=discord.ButtonStyle.red, custom_id="application_reject")
-    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="رفض", emoji="❌", style=discord.ButtonStyle.red, custom_id="app_reject_default")
+    async def reject_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        parts = button.custom_id.split(":")
+        if len(parts) == 3:
+            app_id = int(parts[1])
+            user_id = int(parts[2])
+        else:
+            app_id = self.app_id
+            user_id = self.user_id
+
         gid = str(interaction.guild.id)
-        application = next((app for app in applications_data.get(gid, []) if app.get("id") == self.app_id), None)
+        application = next((app for app in applications_data.get(gid, []) if app.get("id") == app_id), None)
 
         if not application:
             await interaction.response.send_message("❌ لم يتم العثور على التقديم.", ephemeral=True)
@@ -1137,10 +1181,10 @@ class ApplicationControlView(discord.ui.View):
 
         application["status"] = "rejected"
         application["decision_by"] = interaction.user.id
-        application["decision_time"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+        application["decision_time"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
         save_all_applications()
 
-        member = interaction.guild.get_member(self.user_id)
+        member = interaction.guild.get_member(user_id)
         if member:
             try:
                 await member.send(f"❌ تم رفض تقديمك.\n📋 نوع التقديم: `{application.get('type')}`")
@@ -1505,7 +1549,7 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
     gid, uid = str(interaction.guild.id), str(member.id)
     if gid not in warnings: warnings[gid] = {}
     if uid not in warnings[gid]: warnings[gid][uid] = []
-    warnings[gid][uid].append({"reason": reason, "date": datetime.utcnow().strftime("%Y-%m-%d")})
+    warnings[gid][uid].append({"reason": reason, "date": datetime.now(timezone.utc).strftime("%Y-%m-%d")})
     save_json(WARNINGS_FILE, warnings)
     await interaction.response.send_message(f"⚠️ تم تحذير {member.mention}")
 
@@ -1520,7 +1564,7 @@ async def clear(interaction: discord.Interaction, amount: int):
 # الإدارة المتقدمة
 # ==================================
 
-START_TIME = datetime.utcnow()
+START_TIME = datetime.now(timezone.utc)
 
 @bot.tree.command(name="move", description="نقل عضو إلى روم صوتي")
 @app_commands.checks.has_permissions(move_members=True)
@@ -1587,7 +1631,7 @@ async def botinfo(interaction: discord.Interaction):
 
 @bot.tree.command(name="uptime", description="مدة تشغيل البوت")
 async def uptime(interaction: discord.Interaction):
-    delta = datetime.utcnow() - START_TIME
+    delta = datetime.now(timezone.utc) - START_TIME
     await interaction.response.send_message(f"⏱️ البوت يعمل منذ: `{delta}`")
 
 @bot.tree.command(name="stats", description="إحصائيات السيرفر")
@@ -1693,7 +1737,7 @@ async def dm(interaction: discord.Interaction, member: discord.Member, message: 
 @bot.tree.command(name="announce", description="إرسال إعلان Embed")
 @app_commands.checks.has_permissions(administrator=True)
 async def announce(interaction: discord.Interaction, channel: discord.TextChannel, title: str, description: str):
-    embed = discord.Embed(title=title, description=description, color=discord.Color.blue(), timestamp=datetime.utcnow())
+    embed = discord.Embed(title=title, description=description, color=discord.Color.blue(), timestamp=datetime.now(timezone.utc))
     embed.set_footer(text=f"إعلان بواسطة {interaction.user}")
     await channel.send(embed=embed)
     await interaction.response.send_message("✅ تم إرسال الإعلان", ephemeral=True)
@@ -1764,7 +1808,7 @@ async def suggest(interaction: discord.Interaction, suggestion: str):
         await interaction.response.send_message("❌ الروم غير موجود", ephemeral=True)
         return
 
-    embed = discord.Embed(title="💡 اقتراح جديد", description=suggestion, color=discord.Color.blue(), timestamp=datetime.utcnow())
+    embed = discord.Embed(title="💡 اقتراح جديد", description=suggestion, color=discord.Color.blue(), timestamp=datetime.now(timezone.utc))
     embed.set_author(name=interaction.user.name, icon_url=interaction.user.display_avatar.url)
 
     msg = await channel.send(embed=embed)
@@ -1846,7 +1890,7 @@ async def say(interaction: discord.Interaction, message: str):
 @bot.tree.command(name="embed", description="إرسال رسالة Embed من البوت")
 @app_commands.checks.has_permissions(administrator=True)
 async def embed_command(interaction: discord.Interaction, title: str, description: str):
-    embed = discord.Embed(title=title, description=description, color=discord.Color.blue(), timestamp=datetime.utcnow())
+    embed = discord.Embed(title=title, description=description, color=discord.Color.blue(), timestamp=datetime.now(timezone.utc))
     await interaction.response.send_message("✅ تم إرسال الـ Embed", ephemeral=True)
     await interaction.channel.send(embed=embed)
 
@@ -1878,6 +1922,9 @@ async def help_command(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"🤖 Bot Online: {bot.user}")
+
+    # إضافة Persistent View الخاصة بأزرار قبول/رفض التقديمات عامة
+    bot.add_view(ApplicationControlView())
 
     # استعادة البانلات المعتادة للتقديمات والتفاعل
     for panel_item in persistent_panels:
