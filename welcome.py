@@ -89,7 +89,7 @@ def load_json(filename, default=None):
         with open(filename, "r", encoding="utf-8") as f:
             try:
                 return json.load(f)
-            except:
+            except Exception:
                 return default
     return default
 
@@ -221,7 +221,7 @@ async def handle_afk_message(message):
             embed.set_footer(text="تم إلغاء حالة AFK تلقائيًا")
             try:
                 await message.channel.send(embed=embed, delete_after=8)
-            except:
+            except Exception:
                 pass
 
     notified = set()
@@ -251,7 +251,7 @@ async def handle_afk_message(message):
         embed.set_footer(text="قد يكون العضو غير متواجد حاليًا")
         try:
             await message.channel.send(embed=embed, delete_after=10)
-        except:
+        except Exception:
             pass
 
 @bot.tree.command(name="afk", description="تفعيل وضع AFK")
@@ -577,7 +577,7 @@ class LegacyGeneralPanelView(discord.ui.View):
             label=button_name,
             emoji=button_emoji,
             style=discord.ButtonStyle.primary,
-            custom_id=f"general_panel_{button_name}"
+            custom_id=f"general_panel_{button_name[:30]}"
         )
         button.callback = self.button_callback
         self.add_item(button)
@@ -637,7 +637,7 @@ async def send_log(guild, title, description, color):
             embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.utcnow())
             try:
                 await channel.send(embed=embed)
-            except:
+            except Exception:
                 pass
 
 @bot.tree.command(name="set-logs", description="تحديد روم السجلات (Logs)")
@@ -757,7 +757,10 @@ async def update_member_count(guild):
         return
     channel = guild.get_channel(data[guild_id]["channel_id"])
     if channel:
-        await channel.edit(name=data[guild_id]["name"].replace("{count}", str(guild.member_count)))
+        try:
+            await channel.edit(name=data[guild_id]["name"].replace("{count}", str(guild.member_count)))
+        except Exception:
+            pass
 
 # ==================================
 # التحقق من الصلاحيات والأحداث الأساسية
@@ -792,10 +795,10 @@ async def on_member_join(member):
                                           .replace("{server}", guild.name)
 
             embed = discord.Embed(title="👋 عضو جديد!", description=formatted_message, color=discord.Color.green(), timestamp=datetime.utcnow())
-            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+            embed.set_thumbnail(url=member.display_avatar.url)
             try:
                 await channel.send(content=member.mention if show_user else None, embed=embed)
-            except:
+            except Exception:
                 pass
 
     cfg = load_json(CONFIG_FILE, {})
@@ -804,7 +807,7 @@ async def on_member_join(member):
         role = guild.get_role(role_id)
         if role:
             try: await member.add_roles(role)
-            except: pass
+            except Exception: pass
 
     await update_member_count(guild)
     await send_log(guild, "📥 دخول عضو", f"العضو: {member.mention} (`{member.id}`)", discord.Color.green())
@@ -850,7 +853,7 @@ async def anti_check(message):
         try:
             await message.delete()
             await message.author.timeout(timedelta(minutes=5), reason="Mass Mention")
-        except:
+        except Exception:
             pass
         return True
 
@@ -858,7 +861,7 @@ async def anti_check(message):
         try:
             await message.delete()
             await message.author.timeout(timedelta(minutes=3), reason="Spam Mentions")
-        except:
+        except Exception:
             pass
         return True
 
@@ -868,7 +871,7 @@ async def anti_check(message):
                 try:
                     await message.delete()
                     await message.author.timeout(timedelta(minutes=2), reason="Bad Words")
-                except:
+                except Exception:
                     pass
                 return True
 
@@ -876,7 +879,7 @@ async def anti_check(message):
         try:
             await message.delete()
             await message.author.timeout(timedelta(minutes=2), reason="رابط ممنوع")
-        except:
+        except Exception:
             pass
         return True
 
@@ -884,7 +887,7 @@ async def anti_check(message):
         try:
             await message.delete()
             await message.author.timeout(timedelta(minutes=5), reason="دعوة ديسكورد")
-        except:
+        except Exception:
             pass
         return True
 
@@ -918,7 +921,10 @@ async def on_message(message):
     if current_xp >= current_level * 100:
         xp_data[guild_id][user_id_str]["level"] += 1
         new_level = xp_data[guild_id][user_id_str]["level"]
-        await message.channel.send(f"🎉 مبروك {message.author.mention} وصلت للمستوى `{new_level}`!")
+        try:
+            await message.channel.send(f"🎉 مبروك {message.author.mention} وصلت للمستوى `{new_level}`!")
+        except Exception:
+            pass
 
     save_json(XP_FILE, xp_data)
     await bot.process_commands(message)
@@ -1091,7 +1097,7 @@ class ApplicationControlView(discord.ui.View):
 
             try:
                 await member.send(f"🎉 تم قبول تقديمك!\n📋 نوع التقديم: `{app_type}`")
-            except:
+            except Exception:
                 pass
 
         if interaction.message and interaction.message.embeds:
@@ -1138,7 +1144,7 @@ class ApplicationControlView(discord.ui.View):
         if member:
             try:
                 await member.send(f"❌ تم رفض تقديمك.\n📋 نوع التقديم: `{application.get('type')}`")
-            except:
+            except Exception:
                 pass
 
         if interaction.message and interaction.message.embeds:
@@ -1385,8 +1391,11 @@ class ReactionRoleView(discord.ui.View):
             await interaction.response.send_message("⚠️ أنت تملك هذه الرتبة بالفعل", ephemeral=True)
             return
 
-        await interaction.user.add_roles(role)
-        await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+        try:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ تم إعطاؤك رتبة {role.mention}", ephemeral=True)
+        except Exception:
+            await interaction.response.send_message("❌ ليس لدي صلاحيات لإعطائك هذه الرتبة", ephemeral=True)
 
     @discord.ui.button(label="❌ إزالة الرتبة", style=discord.ButtonStyle.red, custom_id="remove_role_btn")
     async def remove_role(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1399,8 +1408,11 @@ class ReactionRoleView(discord.ui.View):
             await interaction.response.send_message("⚠️ أنت لا تملك هذه الرتبة", ephemeral=True)
             return
 
-        await interaction.user.remove_roles(role)
-        await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
+        try:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention}", ephemeral=True)
+        except Exception:
+            await interaction.response.send_message("❌ ليس لدي صلاحيات لإزالة هذه الرتبة", ephemeral=True)
 
     @discord.ui.button(label="👥 عرض الأعضاء", style=discord.ButtonStyle.blurple, custom_id="show_role_members_btn")
     async def show_members(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1452,27 +1464,39 @@ async def reaction_role(interaction: discord.Interaction, channel: discord.TextC
 @bot.tree.command(name="ban", description="حظر عضو")
 @app_commands.checks.has_permissions(ban_members=True)
 async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لا يوجد سبب"):
-    await member.ban(reason=reason)
-    await interaction.response.send_message(f"🔨 تم حظر {member.mention}")
-    await send_log(interaction.guild, "🔨 Ban", f"العضو: {member.mention}\nالسبب: {reason}", discord.Color.red())
+    try:
+        await member.ban(reason=reason)
+        await interaction.response.send_message(f"🔨 تم حظر {member.mention}")
+        await send_log(interaction.guild, "🔨 Ban", f"العضو: {member.mention}\nالسبب: {reason}", discord.Color.red())
+    except Exception:
+        await interaction.response.send_message("❌ لا أمتلك الصلاحيات الكافية لحظر هذا العضو.", ephemeral=True)
 
 @bot.tree.command(name="kick", description="طرد عضو")
 @app_commands.checks.has_permissions(kick_members=True)
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لا يوجد سبب"):
-    await member.kick(reason=reason)
-    await interaction.response.send_message(f"👢 تم طرد {member.mention}")
+    try:
+        await member.kick(reason=reason)
+        await interaction.response.send_message(f"👢 تم طرد {member.mention}")
+    except Exception:
+        await interaction.response.send_message("❌ لا أمتلك الصلاحيات الكافية لطرد هذا العضو.", ephemeral=True)
 
 @bot.tree.command(name="mute", description="كتم عضو (Timeout)")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def mute(interaction: discord.Interaction, member: discord.Member, minutes: int, reason: str = "لا يوجد سبب"):
-    await member.timeout(timedelta(minutes=minutes), reason=reason)
-    await interaction.response.send_message(f"🔇 تم كتم {member.mention} لمدة {minutes} دقيقة.")
+    try:
+        await member.timeout(timedelta(minutes=minutes), reason=reason)
+        await interaction.response.send_message(f"🔇 تم كتم {member.mention} لمدة {minutes} دقيقة.")
+    except Exception:
+        await interaction.response.send_message("❌ لا أمتلك الصلاحيات الكافية لكتم هذا العضو.", ephemeral=True)
 
 @bot.tree.command(name="unmute", description="فك كتم عضو")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def unmute(interaction: discord.Interaction, member: discord.Member):
-    await member.timeout(None, reason="فك الكتم")
-    await interaction.response.send_message(f"🔊 تم فك الكتم عن {member.mention}")
+    try:
+        await member.timeout(None, reason="فك الكتم")
+        await interaction.response.send_message(f"🔊 تم فك الكتم عن {member.mention}")
+    except Exception:
+        await interaction.response.send_message("❌ لا أمتلك الصلاحيات الكافية لفك كتم هذا العضو.", ephemeral=True)
 
 @bot.tree.command(name="warn", description="تحذير عضو")
 @app_commands.checks.has_permissions(manage_messages=True)
@@ -1502,34 +1526,46 @@ START_TIME = datetime.utcnow()
 @app_commands.checks.has_permissions(move_members=True)
 async def move(interaction: discord.Interaction, member: discord.Member, channel: discord.VoiceChannel):
     if member.voice:
-        await member.move_to(channel)
-        await interaction.response.send_message(f"✅ تم نقل {member.mention} إلى {channel.mention}")
+        try:
+            await member.move_to(channel)
+            await interaction.response.send_message(f"✅ تم نقل {member.mention} إلى {channel.mention}")
+        except Exception:
+            await interaction.response.send_message("❌ لا يملك البوت الصلاحيات لنقل العضو.", ephemeral=True)
     else:
         await interaction.response.send_message("❌ العضو ليس في روم صوتي.", ephemeral=True)
 
 @bot.tree.command(name="deafen", description="تغميض صوت عضو")
 @app_commands.checks.has_permissions(deafen_members=True)
 async def deafen(interaction: discord.Interaction, member: discord.Member):
-    await member.edit(deafen=True)
-    await interaction.response.send_message(f"🔇 تم تغميض {member.mention}")
+    try:
+        await member.edit(deafen=True)
+        await interaction.response.send_message(f"🔇 تم تغميض {member.mention}")
+    except Exception:
+        await interaction.response.send_message("❌ لا أملك صلاحية تغميض العضو.", ephemeral=True)
 
 @bot.tree.command(name="undeafen", description="إلغاء تغميض صوت عضو")
 @app_commands.checks.has_permissions(deafen_members=True)
 async def undeafen(interaction: discord.Interaction, member: discord.Member):
-    await member.edit(deafen=False)
-    await interaction.response.send_message(f"🔊 تم إلغاء تغميض {member.mention}")
+    try:
+        await member.edit(deafen=False)
+        await interaction.response.send_message(f"🔊 تم إلغاء تغميض {member.mention}")
+    except Exception:
+        await interaction.response.send_message("❌ لا أملك صلاحية إلغاء تغميض العضو.", ephemeral=True)
 
 @bot.tree.command(name="timeout", description="إعطاء تايم اوت لعضو")
 @app_commands.checks.has_permissions(moderate_members=True)
 async def timeout(interaction: discord.Interaction, member: discord.Member, minutes: int):
-    await member.timeout(timedelta(minutes=minutes))
-    await interaction.response.send_message(f"⏳ تم إعطاء {member.mention} تايم اوت لمدة {minutes} دقيقة")
+    try:
+        await member.timeout(timedelta(minutes=minutes))
+        await interaction.response.send_message(f"⏳ تم إعطاء {member.mention} تايم اوت لمدة {minutes} دقيقة")
+    except Exception:
+        await interaction.response.send_message("❌ فشل إعطاء تايم اوت للعضو.", ephemeral=True)
 
 @bot.tree.command(name="rolelist", description="عرض رتب السيرفر")
 async def rolelist(interaction: discord.Interaction):
     roles = interaction.guild.roles[1:]
     text = "\n".join([f"{r.mention}" for r in roles[:50]])
-    embed = discord.Embed(title="📋 رتب السيرفر", description=text)
+    embed = discord.Embed(title="📋 رتب السيرفر", description=text or "لا توجد رتب.")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="channelinfo", description="معلومات الروم الحالي")
@@ -1601,7 +1637,7 @@ async def nickname(interaction: discord.Interaction, member: discord.Member, nam
     try:
         await member.edit(nick=name)
         await interaction.response.send_message(f"✅ تم تغيير اسم {member.mention} إلى `{name}`")
-    except:
+    except Exception:
         await interaction.response.send_message("❌ لا أستطيع تغيير الاسم", ephemeral=True)
 
 @bot.tree.command(name="addrole", description="إعطاء رتبة لعضو")
@@ -1610,7 +1646,7 @@ async def addrole(interaction: discord.Interaction, member: discord.Member, role
     try:
         await member.add_roles(role)
         await interaction.response.send_message(f"✅ تم إعطاء {member.mention} رتبة {role.mention}")
-    except:
+    except Exception:
         await interaction.response.send_message("❌ لا أستطيع إعطاء هذه الرتبة", ephemeral=True)
 
 @bot.tree.command(name="removerole", description="إزالة رتبة من عضو")
@@ -1619,14 +1655,17 @@ async def removerole(interaction: discord.Interaction, member: discord.Member, r
     try:
         await member.remove_roles(role)
         await interaction.response.send_message(f"❌ تم إزالة رتبة {role.mention} من {member.mention}")
-    except:
+    except Exception:
         await interaction.response.send_message("❌ لا أستطيع إزالة هذه الرتبة", ephemeral=True)
 
 @bot.tree.command(name="createrole", description="إنشاء رتبة جديدة")
 @app_commands.checks.has_permissions(manage_roles=True)
 async def createrole(interaction: discord.Interaction, name: str):
-    role = await interaction.guild.create_role(name=name)
-    await interaction.response.send_message(f"✅ تم إنشاء الرتبة {role.mention}")
+    try:
+        role = await interaction.guild.create_role(name=name)
+        await interaction.response.send_message(f"✅ تم إنشاء الرتبة {role.mention}")
+    except Exception:
+        await interaction.response.send_message("❌ فشل إنشاء الرتبة.", ephemeral=True)
 
 @bot.tree.command(name="roleall", description="إعطاء رتبة لكل أعضاء السيرفر")
 @app_commands.checks.has_permissions(administrator=True)
@@ -1638,7 +1677,7 @@ async def roleall(interaction: discord.Interaction, role: discord.Role):
             try:
                 await member.add_roles(role)
                 count += 1
-            except:
+            except Exception:
                 pass
     await interaction.followup.send(f"✅ تم إعطاء الرتبة {role.mention} لـ {count} عضو")
 
@@ -1648,7 +1687,7 @@ async def dm(interaction: discord.Interaction, member: discord.Member, message: 
     try:
         await member.send(message)
         await interaction.response.send_message("✅ تم إرسال الرسالة", ephemeral=True)
-    except:
+    except Exception:
         await interaction.response.send_message("❌ لا يمكن إرسال رسالة لهذا العضو", ephemeral=True)
 
 @bot.tree.command(name="announce", description="إرسال إعلان Embed")
@@ -1875,6 +1914,14 @@ async def on_ready():
         print("✅ Synced Slash Commands successfully.")
     except Exception as e:
         print(f"Sync error: {e}")
+
+# معالجة أخطاء الصلاحيات العامة لأوامر Slash
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.MissingPermissions):
+        await interaction.response.send_message("❌ لا تمتلك الصلاحيات الكافية لاستخدام هذا الأمر.", ephemeral=True)
+    else:
+        save_error(error)
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 if TOKEN:
