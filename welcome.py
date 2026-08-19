@@ -104,6 +104,15 @@ def save_error(error):
     })
     save_json(ERROR_LOG_FILE, logs)
 
+def parse_hex_color(hex_str, default_color=discord.Color.blurple()):
+    if not hex_str:
+        return default_color
+    hex_str = hex_str.strip().lstrip('#').replace('0x', '')
+    try:
+        return discord.Color(int(hex_str, 16))
+    except ValueError:
+        return default_color
+
 welcome_config = load_json(WELCOME_CONFIG_FILE, {})
 mod_roles = load_json(MOD_CONFIG_FILE, {})
 protection_config = load_json(PROTECTION_FILE, {})
@@ -408,8 +417,24 @@ async def afk_remove(interaction: discord.Interaction, member: discord.Member):
     await interaction.response.send_message(embed=embed)
 
 # ==================================
-# نظام البانلات العامة الديناميكية
+# نظام البانلات العامة الديناميكية (المطورة)
 # ==================================
+
+STYLE_MAP = {
+    "أزرق": discord.ButtonStyle.primary,
+    "blue": discord.ButtonStyle.primary,
+    "primary": discord.ButtonStyle.primary,
+    "رمادي": discord.ButtonStyle.secondary,
+    "grey": discord.ButtonStyle.secondary,
+    "gray": discord.ButtonStyle.secondary,
+    "secondary": discord.ButtonStyle.secondary,
+    "أخضر": discord.ButtonStyle.success,
+    "green": discord.ButtonStyle.success,
+    "success": discord.ButtonStyle.success,
+    "أحمر": discord.ButtonStyle.danger,
+    "red": discord.ButtonStyle.danger,
+    "danger": discord.ButtonStyle.danger,
+}
 
 class GeneralPanelButton(discord.ui.Button):
     def __init__(self, panel_id, button_data):
@@ -418,11 +443,13 @@ class GeneralPanelButton(discord.ui.Button):
 
         label = button_data.get("name", "زر")
         emoji = button_data.get("emoji")
+        style_key = str(button_data.get("style", "secondary")).lower()
+        style = STYLE_MAP.get(style_key, discord.ButtonStyle.secondary)
 
         super().__init__(
             label=label[:80],
             emoji=emoji if emoji else None,
-            style=discord.ButtonStyle.secondary,
+            style=style,
             custom_id=f"general_panel:{panel_id}:{button_data.get('id')}"
         )
 
@@ -440,12 +467,17 @@ class GeneralPanelButton(discord.ui.Button):
             await interaction.response.send_message("❌ هذا الزر لم يعد موجودًا.", ephemeral=True)
             return
 
+        embed_color = parse_hex_color(panel.get("color"), discord.Color.blurple())
         embed = discord.Embed(
             title=button.get("title", "بدون عنوان"),
             description=button.get("description", "بدون وصف"),
-            color=discord.Color.blurple(),
+            color=embed_color,
             timestamp=datetime.now(timezone.utc)
         )
+
+        image_url = button.get("image")
+        if image_url:
+            embed.set_image(url=image_url)
 
         for field in button.get("fields", []):
             name = field.get("name")
@@ -488,26 +520,42 @@ class GeneralButtonModal(discord.ui.Modal):
 
         self.button_name = discord.ui.TextInput(label="اسم الزر", placeholder="مثال: شرح الرتب", max_length=80)
         self.button_emoji = discord.ui.TextInput(label="إيموجي الزر", placeholder="مثال: 📋", required=False, max_length=100)
+        self.button_style = discord.ui.TextInput(
+            label="لون الزر",
+            placeholder="أزرق / رمادي / أخضر / أحمر (الافتراضي: رمادي)",
+            required=False,
+            max_length=20
+        )
         self.embed_title = discord.ui.TextInput(label="عنوان الـ Embed عند الضغط", placeholder="مثال: شرح الرتب", max_length=256)
         self.embed_description = discord.ui.TextInput(
-            label="وصف الـ Embed",
-            placeholder="اكتب المحتوى الذي سيظهر عند الضغط",
+            label="وصف الـ Embed + رابط الصورة اختيارياً",
+            placeholder="اكتب وصف الرسالة التي تظهر عند النقر...",
             style=discord.TextStyle.paragraph,
             max_length=4000
         )
 
         self.add_item(self.button_name)
         self.add_item(self.button_emoji)
+        self.add_item(self.button_style)
         self.add_item(self.embed_title)
         self.add_item(self.embed_description)
 
     async def on_submit(self, interaction: discord.Interaction):
+        # البحث عن رابط صورة داخل الوصف تلقائيًا إذا وُجد
+        desc_text = self.embed_description.value
+        button_image = None
+        urls = re.findall(r'https?://\S+\.(?:png|jpg|jpeg|gif|webp)', desc_text, re.IGNORECASE)
+        if urls:
+            button_image = urls[0]
+
         button_data = {
             "id": str(random.randint(100000, 999999)),
             "name": self.button_name.value,
             "emoji": self.button_emoji.value or None,
+            "style": self.button_style.value or "secondary",
             "title": self.embed_title.value,
-            "description": self.embed_description.value,
+            "description": desc_text,
+            "image": button_image,
             "fields": []
         }
 
@@ -530,11 +578,15 @@ class GeneralButtonModal(discord.ui.Modal):
         save_general_panels()
 
         view = GeneralPanelView(self.panel_data)
+        panel_color = parse_hex_color(self.panel_data.get("color"), discord.Color.blurple())
+
         embed = discord.Embed(
             title=self.panel_data["title"],
             description=self.panel_data["description"],
-            color=discord.Color.blurple()
+            color=panel_color
         )
+        if self.panel_data.get("image"):
+            embed.set_image(url=self.panel_data["image"])
 
         await interaction.response.send_message("✅ تم إنشاء البانل بنجاح!", ephemeral=True)
         await interaction.channel.send(embed=embed, view=view)
@@ -549,19 +601,35 @@ class GeneralPanelModal(discord.ui.Modal):
         self.panel_title = discord.ui.TextInput(label="عنوان البانل", placeholder="مثال: معلومات السيرفر", max_length=256)
         self.panel_description = discord.ui.TextInput(
             label="وصف البانل",
-            placeholder="اكتب وصف البانل هنا",
+            placeholder="اكتب وصف البانل هنا...",
             style=discord.TextStyle.paragraph,
             max_length=4000
+        )
+        self.panel_color = discord.ui.TextInput(
+            label="لون البانل (Hex Code)",
+            placeholder="مثال: #3498db أو ff0000 (اختياري)",
+            required=False,
+            max_length=10
+        )
+        self.panel_image = discord.ui.TextInput(
+            label="رابط صورة البانل (Image URL)",
+            placeholder="https://example.com/image.png (اختياري)",
+            required=False,
+            max_length=500
         )
 
         self.add_item(self.panel_title)
         self.add_item(self.panel_description)
+        self.add_item(self.panel_color)
+        self.add_item(self.panel_image)
 
     async def on_submit(self, interaction: discord.Interaction):
         panel_data = {
             "id": None,
             "title": self.panel_title.value,
             "description": self.panel_description.value,
+            "color": self.panel_color.value or None,
+            "image": self.panel_image.value or None,
             "buttons": []
         }
         await interaction.response.send_message(
@@ -571,7 +639,7 @@ class GeneralPanelModal(discord.ui.Modal):
         )
 
 
-@bot.tree.command(name="general-panel", description="إنشاء بانل عام بأزرار قابلة للتخصيص")
+@bot.tree.command(name="general-panel", description="إنشاء بانل عام بأزرار قابلة للتخصيص والألوان والصور")
 @app_commands.describe(buttons="عدد الأزرار التي تريدها من 1 إلى 5")
 @app_commands.choices(
     buttons=[
@@ -592,7 +660,7 @@ async def general_panel(interaction: discord.Interaction, buttons: app_commands.
 # ==================================
 
 class LegacyGeneralPanelView(discord.ui.View):
-    def __init__(self, button_name, button_emoji, button_description):
+    def __init__(self, button_name, button_emoji, button_description, color=None):
         super().__init__(timeout=None)
 
         button = discord.ui.Button(
@@ -606,17 +674,27 @@ class LegacyGeneralPanelView(discord.ui.View):
 
         self.button_label = button_name
         self.button_description = button_description
+        self.color = parse_hex_color(color, discord.Color.blurple())
 
     async def button_callback(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title=self.button_label,
             description=self.button_description,
-            color=discord.Color.blurple()
+            color=self.color
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@bot.tree.command(name="panel", description="إنشاء بانل عام سريع")
+@bot.tree.command(name="panel", description="إنشاء بانل عام سريع مع تحديد الألوان والصورة")
+@app_commands.describe(
+    channel="الروم المراد الإرسال إليه",
+    description="وصف البانل",
+    button_name="اسم الزر",
+    button_emoji="إيموجي الزر",
+    button_description="الوصف الظاهر بعد الضغط على الزر",
+    image="رابط صورة البانل - اختياري",
+    color="كود اللون Hex - اختياري (مثال: #ff0000)"
+)
 @app_commands.checks.has_permissions(administrator=True)
 async def panel(
     interaction: discord.Interaction,
@@ -625,13 +703,15 @@ async def panel(
     button_name: str,
     button_emoji: str,
     button_description: str,
-    image: str = None
+    image: str = None,
+    color: str = None
 ):
-    embed = discord.Embed(title="📌 Panel", description=description, color=discord.Color.blurple())
+    embed_color = parse_hex_color(color, discord.Color.blurple())
+    embed = discord.Embed(title="📌 Panel", description=description, color=embed_color)
     if image:
         embed.set_image(url=image)
 
-    view = LegacyGeneralPanelView(button_name, button_emoji, button_description)
+    view = LegacyGeneralPanelView(button_name, button_emoji, button_description, color)
     msg = await channel.send(embed=embed, view=view)
 
     general_panels.append({
@@ -640,7 +720,8 @@ async def panel(
         "message_id": msg.id,
         "button_name": button_name,
         "button_emoji": button_emoji,
-        "button_description": button_description
+        "button_description": button_description,
+        "color": color
     })
 
     save_general_panels()
@@ -1078,14 +1159,12 @@ class ApplicationControlView(discord.ui.View):
         self.user_id = user_id
         self.app_id = app_id
 
-        # تعيين معرفات ديناميكية ثابته لتعمل حتى بعد إعادة تشغيل البوت
         if app_id and user_id:
             self.accept_btn.custom_id = f"app_accept:{app_id}:{user_id}"
             self.reject_btn.custom_id = f"app_reject:{app_id}:{user_id}"
 
     @discord.ui.button(label="قبول", emoji="✅", style=discord.ButtonStyle.green, custom_id="app_accept_default")
     async def accept_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # استخراج البيانات من custom_id إذا أعيد تشغيل البوت
         parts = button.custom_id.split(":")
         if len(parts) == 3:
             app_id = int(parts[1])
@@ -1946,7 +2025,8 @@ async def on_ready():
                         LegacyGeneralPanelView(
                             panel_item["button_name"],
                             panel_item["button_emoji"],
-                            panel_item["button_description"]
+                            panel_item["button_description"],
+                            panel_item.get("color")
                         ),
                         message_id=panel_item.get("message_id")
                     )
